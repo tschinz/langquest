@@ -1,0 +1,19 @@
+current_exercise = "01-rust/01-hello-world"
+
+[exercises."01-rust/01-hello-world"]
+best_score = 1.0
+passed = true
+solution_seen = true
+
+[rust]
+cmd = "rustc --edition 2024 --test <file> -o <out>"
+
+[python]
+cmd = "python3 -m pytest <file> --tb=short -q"
+
+[go]
+cmd = "go test -v ."
+
+[ripes]
+bin = "/Users/zas/work/repo/my/rust/lq/ripes/macos/Ripes.app/Contents/MacOS/Ripes"
+cmd = "ripes --mode cli -t asm --proc RV32_SS --json --regs --runinfo --src <file>"
