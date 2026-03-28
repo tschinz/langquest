@@ -1,0 +1,175 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      release_version: ${{ steps.get_version.outputs.release_version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get the latest tag to define version
+        id: get_version
+        run: |
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "Latest tag: $LATEST_TAG"
+          echo "RELEASE_VERSION=$LATEST_TAG" >> $GITHUB_ENV
+          echo "release_version=$LATEST_TAG" >> $GITHUB_OUTPUT
+
+      - name: Generate a changelog
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --strip all --latest
+        env:
+          OUTPUT: CHANGELOG.md
+          GITHUB_REPO: ${{ github.repository }}
+
+      - name: Upload Changelog
+        uses: actions/upload-artifact@v4
+        with:
+          name: changelog
+          path: CHANGELOG.md
+
+  build:
+    needs: [prepare]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: aarch64-apple-darwin
+            os: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Configure cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install cross-compilation tools (Linux ARM64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Build binary
+        run: cargo build --release --target ${{ matrix.target }}
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+
+      - name: Package binary (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar -czf ../../../lq-${{ needs.prepare.outputs.release_version }}-${{ matrix.target }}.tar.gz lq
+          cd ../../..
+
+      - name: Package binary (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          cd target/${{ matrix.target }}/release
+          7z a ../../../lq-${{ needs.prepare.outputs.release_version }}-${{ matrix.target }}.zip lq.exe
+          cd ../../..
+
+      - name: Upload binary artifact (Unix)
+        if: matrix.os != 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: lq-${{ matrix.target }}
+          path: lq-${{ needs.prepare.outputs.release_version }}-${{ matrix.target }}.tar.gz
+
+      - name: Upload binary artifact (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: lq-${{ matrix.target }}
+          path: lq-${{ needs.prepare.outputs.release_version }}-${{ matrix.target }}.zip
+
+  sbom:
+    needs: [prepare]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-sbom
+        run: cargo install cargo-sbom
+
+      - name: Generate SBOM
+        run: |
+          cargo sbom --output-format cyclone_dx_json_1_6 > sbom-cyclone_dx_1_6.json
+
+      - name: Upload SBOM to Dependency Track
+        run: |
+          curl -X POST "${{ secrets.DT_BASE_URL }}/api/v1/bom" \
+            -H "X-Api-Key: ${{ secrets.DT_API_KEY }}" \
+            -H "Content-Type: multipart/form-data" \
+            -F "project=${{ secrets.DT_PROJECT_UUID }}" \
+            -F "bom=@sbom-cyclone_dx_1_6.json"
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom-cyclone_dx_1_6.json
+
+  release:
+    needs: [prepare, build, sbom]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Move build artifacts to expected location
+        run: |
+          mkdir -p output
+          find artifacts -name "lq-*" -type f \( -name "*.tar.gz" -o -name "*.zip" \) -exec cp {} output/ \;
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.release_version }}
+        with:
+          tag_name: ${{ env.RELEASE_VERSION }}
+          name: "lq ${{ env.RELEASE_VERSION }}"
+          body_path: artifacts/changelog/CHANGELOG.md
+          files: ./output/lq-*
+          draft: false
+          prerelease: false
