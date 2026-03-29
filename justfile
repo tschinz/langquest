@@ -11,7 +11,7 @@ args := ""
 project_directory := justfile_directory()
 release := `git describe --tags --always`
 version := "0.1.0"
-url := "https://github.com/tschinz/lq"
+url := "https://github.com/tschinz/langquest"
 test_repo := justfile_directory() / "tests" / "sample-repo"
 
 ##################################################
@@ -112,8 +112,8 @@ check-deps:
         echo "✓ All dependencies satisfied."
     fi
 
-# Install all dependencies on macOS via Homebrew (installs brew itself if absent)
-install-macos:
+# Setup all dependencies on macOS via Homebrew (installs brew itself if absent)
+setup-macos:
     #!/usr/bin/env bash
     set -euo pipefail
 
