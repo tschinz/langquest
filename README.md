@@ -3,12 +3,10 @@
 ![](https://tianji.zahno.dev/telemetry/clnzoxcy10001vy2ohi4obbi0/cmn9yy8dy1cc9sjrz8b6ejk3v.gif)
 
 <div align="center">
-  <img src="img/lq.svg" alt="LangQuest logo" width="150">
+  <img src="img/lq.svg" alt="LangQuest logo" width="400">
 </div>
 
-# lq — LangQuest
-
-A terminal-based, interactive programming exercise runner. Inspired by [Rustlings](https://github.com/rust-lang/rustlings) and [100 Exercises to Learn Rust](https://rust-exercises.com/), LangQuest extends the concept to multiple languages — work through hands-on exercises in **Rust**, **Go**, **Python**, **RISC-V assembly**, and **Markdown** with real-time feedback, progress tracking, and a built-in hint system.
+A terminal-based, interactive programming exercise runner. Inspired by [Rustlings](https://github.com/rust-lang/rustlings) and [100 Exercises to Learn Rust](https://rust-exercises.com/), LangQuest extends the concept to multiple languages - work through hands-on exercises in **Rust**, **Go**, **Python**, **RISC-V assembly**, and **Markdown** with real-time feedback, progress tracking, and a built-in hint system.
 
 ![demo](img/lq-demo.gif)
 
@@ -31,13 +29,13 @@ A terminal-based, interactive programming exercise runner. Inspired by [Rustling
 
 ## Features
 
-- **Multi-language support** — Rust, Go, Python, RISC-V assembly, and Markdown/conceptual exercises
-- **Live verification** — file saves trigger immediate re-runs; results stream into the TUI without leaving the editor
-- **Paged exercise view** — Theory → Task → Output → Solution, navigated with arrow keys
-- **Progressive hints** — reveal hints one at a time; after all hints, optionally unlock the full solution
-- **Syntax-highlighted solutions** — reference code and prose explanations, gated until pass or explicit unlock
-- **Overview with tree panel** — scrollable exercise table and module/exercise tree with live progress
-- **Persistent progress** — `lq.toml` at the repo root tracks scores, pass status, and solution visibility
+- **Multi-language support** - Rust, Go, Python, RISC-V assembly, and Markdown/conceptual exercises
+- **Live verification** - file saves trigger immediate re-runs; results stream into the TUI without leaving the editor
+- **Paged exercise view** - Theory → Task → Output → Solution, navigated with arrow keys
+- **Progressive hints** - reveal hints one at a time; after all hints, optionally unlock the full solution
+- **Syntax-highlighted solutions** - reference code and prose explanations, gated until pass or explicit unlock
+- **Overview with tree panel** - scrollable exercise table and module/exercise tree with live progress
+- **Persistent progress** - `lq.toml` at the repo root tracks scores, pass status, and solution visibility
 
 ## Installation
 
@@ -69,7 +67,7 @@ Depending on which languages your exercises use, install the corresponding toolc
 | **Python** | Install Python 3.x and pytest: `pip install pytest` |
 | **Go** | Install from [go.dev](https://go.dev/dl/) or via package manager |
 | **RISC-V** | GNU toolchain (`apt install gcc-riscv64-linux-gnu`) or [Ripes](https://github.com/mortbopet/Ripes) simulator |
-| **Markdown** | No additional tools required — verification is regex-based |
+| **Markdown** | No additional tools required - verification is regex-based |
 
 ## Getting Started
 
@@ -129,7 +127,7 @@ solution_seen = false
 ```
 
 **Persistence rules:**
-- `best_score` only increases — lower scores never overwrite higher ones
+- `best_score` only increases - lower scores never overwrite higher ones
 - `passed` becomes `true` when `score >= threshold` and never resets
 - `solution_seen` becomes `true` on first Solution page visit and never resets
 
@@ -178,20 +176,20 @@ Your task is to implement the `greeting()` function so that it returns
 the string `"Hello, World!"` exactly.
 ```
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `id` | string | ✓ | Unique snake_case identifier (key in `lq.toml`) |
-| `name` | string | ✓ | Display name in the exercise table |
-| `language` | string | ✓ | `rust`, `go`, `python`, `riscv`, or `text` |
-| `difficulty` | integer 1–5 | ✓ | Shown as stars in the Overview |
-| `description` | string | ✓ | One-line summary |
-| `topics` | array | ✓ | Tags shown in the Topics column |
+| Field         | Type                                             | Description |
+|---------------|--------------------------------------------------|-------------|
+| `id`          | string                                           | Unique snake_case identifier (key in `lq.toml`) |
+| `name`        | string                                           | Display name in the exercise table |
+| `language`    | string (`rust`, `go`, `python`, `riscv`, `text`) | language type of exercise |
+| `difficulty`  | integer (1-5)                                    | Shown as stars in the Overview |
+| `description` | string                                           | One-line summary |
+| `topics`      | array                                            | Tags shown in the Topics column |
 
 #### Student Source File (main.*)
 
 The file extension determines the language and verification method:
 
-**Rust** (`main.rs`) — Uses `#[test]` functions with `// TODO` markers:
+**Rust** (`main.rs`) - Uses `#[test]` functions with `// TODO` markers:
 
 ```rust
 // TODO: implement the add function
@@ -215,7 +213,7 @@ mod tests {
 }
 ```
 
-**Go** (`main.go` + `main_test.go`) — Uses `TestXxx` functions:
+**Go** (`main.go` + `main_test.go`) - Uses `TestXxx` functions:
 
 ```go
 // TODO: implement the Add function
@@ -224,7 +222,7 @@ func Add(a, b int) int {
 }
 ```
 
-**Python** (`main.py`) — Uses unittest or pytest:
+**Python** (`main.py`) - Uses unittest or pytest:
 
 ```python
 # TODO: implement the add function
@@ -238,7 +236,7 @@ def test_add_negative():
     assert add(-1, 1) == 0
 ```
 
-**RISC-V Assembly** (`main.asm`) — Uses `EXPECT_*` directives:
+**RISC-V Assembly** (`main.asm`) - Uses `EXPECT_*` directives:
 
 ```asm
 # EXPECT_REG: x7 42
@@ -251,7 +249,7 @@ def test_add_negative():
 |-----------|-------------|
 | `EXPECT_REG: <name> <value>` | register name and expected 32-bit value |
 
-**Markdown** (`main.md`) — Free-text answers matched against keywords:
+**Markdown** (`main.md`) - Free-text answers matched against keywords:
 
 ```markdown
 # Question: What keyword makes a Rust variable mutable?
@@ -262,7 +260,7 @@ def test_add_negative():
 
 #### Solution Folder
 
-**solution/main.*** — The complete reference solution:
+**solution/main.*** - The complete reference solution:
 
 ```rust
 fn add(a: i32, b: i32) -> i32 {
@@ -285,7 +283,7 @@ mod tests {
 }
 ```
 
-**solution/solution.md** — Hints, keywords, and explanation with frontmatter:
+**solution/solution.md** - Hints, keywords, and explanation with frontmatter:
 
 ```markdown
 ---
@@ -318,7 +316,7 @@ free-text answers via regex matching.
 ## CLI Reference
 
 ```
-LangQuest — interactive programming exercises
+LangQuest - interactive programming exercises
 
 Usage: lq [OPTIONS] [COMMAND]
 
@@ -363,4 +361,4 @@ lq --reset
 
 ## License
 
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
