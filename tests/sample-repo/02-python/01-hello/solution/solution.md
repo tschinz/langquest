@@ -32,7 +32,7 @@ if __name__ == "__main__":
 ```
 
 **Key concepts:**
-- `def` — defines a function
-- `return` — sends a value back to the caller
-- `unittest` — Python's built-in testing framework
-- `assertEqual` — checks if expected matches actual
+- `def` - defines a function
+- `return` - sends a value back to the caller
+- `unittest` - Python's built-in testing framework
+- `assertEqual` - checks if expected matches actual

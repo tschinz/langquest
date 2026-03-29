@@ -36,7 +36,7 @@ pub enum Language {
 impl Language {
   /// Attempt to derive a [`Language`] from a file extension string.
   ///
-  /// This is a *helper* — the canonical language comes from frontmatter,
+  /// This is a *helper* - the canonical language comes from frontmatter,
   /// not from the file extension.
   #[allow(dead_code)]
   pub fn from_extension(ext: &str) -> Option<Language> {
@@ -119,11 +119,11 @@ impl Language {
 /// Current completion status of an exercise, derived from persisted state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExerciseStatus {
-  /// Below threshold — keep working.
+  /// Below threshold - keep working.
   Failing,
   /// Threshold reached or previously passed, but solution not yet viewed.
   Partial,
-  /// Passed **and** solution viewed — fully complete.
+  /// Passed **and** solution viewed - fully complete.
   Complete,
 }
 
@@ -430,7 +430,7 @@ fn find_student_source(exercise_dir: &Path) -> Result<PathBuf, ExerciseError> {
     };
 
     if file_name == "main" {
-      // Make sure it isn't inside `solution/` — should not be since we
+      // Make sure it isn't inside `solution/` - should not be since we
       // are iterating the exercise dir itself, but guard anyway.
       if let Some(parent) = path.parent()
         && parent == exercise_dir
@@ -739,7 +739,7 @@ Do the thing.
     .unwrap();
     fs::write(good_dir.join("main.rs"), "").unwrap();
 
-    // Bad exercise — no 02-task.md
+    // Bad exercise - no 02-task.md
     fs::write(bad_dir.join("main.rs"), "").unwrap();
 
     let (modules, errors) = discover_exercises(&tmp);

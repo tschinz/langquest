@@ -7,14 +7,14 @@
 //!
 //! # Design invariants
 //!
-//! * **No panics** — every runner catches errors and returns
+//! * **No panics** - every runner catches errors and returns
 //!   [`VerificationResult`] with `score == 0.0` and a human-readable `output`.
 //! * All child processes are run via [`std::process::Command::output`], which
 //!   captures both stdout and stderr.  A 30-second timeout is not enforced at
 //!   the process level today; callers that need a bound should wrap the call in
 //!   a thread with a deadline.
 //! * Temporary artefacts (`.lq_test`, `.lq_main.o`, `.lq_main`) are cleaned up
-//!   on a best-effort basis — cleanup failures are silently ignored.
+//!   on a best-effort basis - cleanup failures are silently ignored.
 
 use std::collections::HashMap;
 use std::fs;
@@ -235,7 +235,7 @@ fn verify_rust(exercise: &Exercise, rust_cfg: &RustConfig) -> VerificationResult
 
 /// Directives parsed from assembly source comment lines.
 struct AsmDirectives {
-  /// `; EXPECT_REG: <name> <value>` — register name → expected 32-bit value.
+  /// `; EXPECT_REG: <name> <value>` - register name → expected 32-bit value.
   expected_regs: Vec<(String, i64)>,
 }
 
@@ -379,7 +379,7 @@ pub(crate) fn find_ripes_binary() -> Option<PathBuf> {
   // 2. Walk up from the lq executable directory.
   //    Covers both the installed layout (<exe_dir>/ripes/…) and the
   //    development layout where the exe is buried inside
-  //    target/debug/ — walking up two levels reaches the repo root
+  //    target/debug/ - walking up two levels reaches the repo root
   //    where ripes/ lives.
   if let Ok(exe) = std::env::current_exe() {
     let mut dir = exe.parent().map(Path::to_path_buf);
@@ -396,7 +396,7 @@ pub(crate) fn find_ripes_binary() -> Option<PathBuf> {
     }
   }
 
-  // 3. CWD fallback — covers `cargo run` invoked from the repo root.
+  // 3. CWD fallback - covers `cargo run` invoked from the repo root.
   if let Ok(cwd) = std::env::current_dir()
     && let Some(bin) = find_bundled_ripes(&cwd)
   {
@@ -413,7 +413,7 @@ pub(crate) fn find_ripes_binary() -> Option<PathBuf> {
 /// Split `ripes_cfg.cmd` on whitespace, substitute `<file>` with
 /// `source_file`, and resolve the binary using the following priority:
 ///
-/// 1. `ripes_cfg.bin` — explicit path from `lq.toml` (highest priority).
+/// 1. `ripes_cfg.bin` - explicit path from `lq.toml` (highest priority).
 /// 2. First token of `cmd` if it already looks like a path.
 /// 3. Auto-discovery (`find_ripes_binary`).
 /// 4. Fall back to the bare token name and let the OS resolve via `$PATH`.
@@ -429,13 +429,13 @@ fn build_ripes_command(ripes_cfg: &RipesConfig, source_file: &str) -> Result<(Pa
 
   // Resolve the binary.
   let binary = if !ripes_cfg.bin.is_empty() {
-    // 1. Explicit path set in lq.toml — highest priority.
+    // 1. Explicit path set in lq.toml - highest priority.
     PathBuf::from(&ripes_cfg.bin)
   } else if program_token.contains(std::path::MAIN_SEPARATOR) || program_token.contains('/') {
     // 2. The cmd token already looks like a path.
     PathBuf::from(program_token)
   } else {
-    // 3. Bare name — try discovery first, fall back to letting the OS find it.
+    // 3. Bare name - try discovery first, fall back to letting the OS find it.
     find_ripes_binary().unwrap_or_else(|| PathBuf::from(program_token))
   };
 
@@ -939,7 +939,7 @@ fn verify_markdown(exercise: &Exercise) -> VerificationResult {
 /// is detected.
 ///
 /// The application layer is responsible for calling [`verify`] when a signal
-/// arrives — the watcher itself performs no verification work.
+/// arrives - the watcher itself performs no verification work.
 pub struct ExerciseWatcher {
   /// Held to keep the underlying OS watcher alive.  Dropped when the
   /// struct is dropped, which stops watching.
@@ -964,7 +964,7 @@ impl ExerciseWatcher {
         if let Ok(event) = res
           && matches!(event.kind, EventKind::Create(_) | EventKind::Modify(_))
         {
-          // Ignore send errors — the receiver may have been
+          // Ignore send errors - the receiver may have been
           // dropped if the app is shutting down.
           let _ = tx.send(());
         }
@@ -1130,7 +1130,7 @@ addi s2, s0, 1
 
   #[test]
   fn parse_asm_directives_hex_inline_comment() {
-    // Hex value with inline comment — formatted hex space variant.
+    // Hex value with inline comment - formatted hex space variant.
     let src = "# EXPECT_REG: x26 0x0000 0022    # 34 decimal\n";
     let d = parse_asm_directives(src);
     assert_eq!(d.expected_regs, vec![("x26".to_string(), 0x22)]);
@@ -1145,7 +1145,7 @@ addi s2, s0, 1
 
   #[test]
   fn parse_asm_directives_hex_with_spaces() {
-    // "0x0000 0001" — formatted hex with an internal space
+    // "0x0000 0001" - formatted hex with an internal space
     let src = "; EXPECT_REG: x18 0x0000 0001\n";
     let d = parse_asm_directives(src);
     assert_eq!(d.expected_regs, vec![("x18".to_string(), 1)]);
@@ -1244,7 +1244,7 @@ addi s2, s0, 1
   #[test]
   fn combined_output_merges_streams() {
     // We can only test the helper with a real Output struct from a
-    // command — use a trivial echo.
+    // command - use a trivial echo.
     let out = Command::new("sh").args(["-c", "echo hello; echo err >&2"]).output();
     if let Ok(o) = out {
       let combined = combined_output(&o);

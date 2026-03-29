@@ -21,7 +21,7 @@ pub enum View {
   ExerciseView,
   /// Table of all exercises with optional tree panel.
   Overview,
-  /// About page — project info and credits.
+  /// About page - project info and credits.
   About,
 }
 
@@ -276,7 +276,7 @@ impl App {
       })?;
 
       // Apply OSC 8 hyperlinks directly to the terminal after the frame
-      // is flushed — bypasses ratatui's buffer diff width calculation.
+      // is flushed - bypasses ratatui's buffer diff width calculation.
       if let Some(ref p) = pending {
         let mut stderr = std::io::stderr();
         p.write_to(completed.buffer, &mut stderr)?;
@@ -497,7 +497,7 @@ impl App {
     }
   }
 
-  /// Reveal the next hint, or — once all hints are shown — prompt the user
+  /// Reveal the next hint, or - once all hints are shown - prompt the user
   /// to confirm unlocking the solution, then unlock it on a second press.
   fn handle_hint(&mut self) {
     // No-op when not in the Exercise View.
@@ -518,7 +518,7 @@ impl App {
     let total = self.current_exercise().solution_data.as_ref().map_or(0, |sd| sd.hints.len());
 
     if self.hints_revealed < total {
-      // Still hints left — reveal the next one and clear any pending flag.
+      // Still hints left - reveal the next one and clear any pending flag.
       self.hints_revealed += 1;
       self.solution_unlock_pending = false;
       self.scroll_to_hint_line(false, total);
@@ -586,7 +586,7 @@ impl App {
     }
   }
 
-  /// Page up — scroll content up by a larger amount.
+  /// Page up - scroll content up by a larger amount.
   fn handle_page_up(&mut self) {
     if self.view == View::Overview {
       self.overview_cursor = self.overview_cursor.saturating_sub(10);
@@ -595,7 +595,7 @@ impl App {
     }
   }
 
-  /// Page down — scroll content down by a larger amount.
+  /// Page down - scroll content down by a larger amount.
   fn handle_page_down(&mut self) {
     if self.view == View::Overview {
       let max = self.exercises.len().saturating_sub(1);
@@ -627,16 +627,16 @@ impl App {
   /// Open the current exercise's source file in an editor.
   ///
   /// Resolution order:
-  /// 1. `$VISUAL` — the user's preferred GUI editor (e.g. `code`, `zed`).
+  /// 1. `$VISUAL` - the user's preferred GUI editor (e.g. `code`, `zed`).
   ///    `$EDITOR` is intentionally skipped: terminal editors (vim, nano, …)
   ///    would conflict with the running TUI.
   /// 2. OS default text handler:
-  ///    - macOS  : `open -t <file>` — always opens as text, even for unknown
+  ///    - macOS  : `open -t <file>` - always opens as text, even for unknown
   ///      extensions like `.asm` where plain `open` would fail.
   ///    - Linux  : `xdg-open <file>`
-  ///    - Windows: `notepad <file>` — guaranteed to open any file as text.
+  ///    - Windows: `notepad <file>` - guaranteed to open any file as text.
   ///
-  /// The process is spawned and forgotten — the TUI keeps running.
+  /// The process is spawned and forgotten - the TUI keeps running.
   fn open_in_editor(&self) {
     if self.view != View::ExerciseView {
       return;

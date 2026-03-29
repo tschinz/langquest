@@ -1,4 +1,4 @@
-//! About page — content is driven by the embedded `about.md` file.
+//! About page - content is driven by the embedded `about.md` file.
 //!
 //! The file is compiled into the binary via [`include_str!`], parsed with the
 //! standard markdown renderer, and displayed identically to the Theory / Task

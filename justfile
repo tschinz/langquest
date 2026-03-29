@@ -41,14 +41,14 @@ info:
     rustup show 2>/dev/null || echo "rustup not found"
     echo ""
     echo "--- Exercise toolchains ---"
-    printf "  %-12s %s\n" "rustc"   "$(rustc --version 2>/dev/null   || echo 'NOT FOUND — needed for Rust exercises')"
-    printf "  %-12s %s\n" "python3" "$(python3 --version 2>/dev/null || echo 'NOT FOUND — needed for Python exercises')"
+    printf "  %-12s %s\n" "rustc"   "$(rustc --version 2>/dev/null   || echo 'NOT FOUND - needed for Rust exercises')"
+    printf "  %-12s %s\n" "python3" "$(python3 --version 2>/dev/null || echo 'NOT FOUND - needed for Python exercises')"
     if pytest_v=$(python3 -m pytest --version 2>/dev/null); then
         printf "  %-12s %s\n" "pytest"  "$pytest_v"
     else
-        printf "  %-12s %s\n" "pytest"  "not found — optional, falls back to unittest"
+        printf "  %-12s %s\n" "pytest"  "not found - optional, falls back to unittest"
     fi
-    printf "  %-12s %s\n" "go"      "$(go version 2>/dev/null        || echo 'NOT FOUND — needed for Go exercises')"
+    printf "  %-12s %s\n" "go"      "$(go version 2>/dev/null        || echo 'NOT FOUND - needed for Go exercises')"
     if [[ -n "${RIPES_PATH:-}" ]]; then
         printf "  %-12s %s\n" "ripes" "RIPES_PATH=${RIPES_PATH}"
     elif command -v ripes >/dev/null 2>&1; then
@@ -56,7 +56,7 @@ info:
     elif [[ -x "{{ project_directory }}/ripes/macos/Ripes.app/Contents/MacOS/Ripes" ]]; then
         printf "  %-12s %s\n" "ripes" "bundled binary: ripes/macos/Ripes.app/Contents/MacOS/Ripes"
     else
-        printf "  %-12s %s\n" "ripes" "NOT FOUND — set RIPES_PATH or see https://github.com/mortbopet/Ripes/releases"
+        printf "  %-12s %s\n" "ripes" "NOT FOUND - set RIPES_PATH or see https://github.com/mortbopet/Ripes/releases"
     fi
 
 # Check that all required tools are available (build tools are fatal; exercise toolchains warn)
@@ -71,20 +71,20 @@ check-deps:
     fail() { printf "  ✗ %-10s %s\n" "$1" "$2"; errors=$((errors+1)); }
 
     echo "--- lq build tools ---"
-    if v=$(cargo --version 2>/dev/null);        then ok   "cargo"   "$v"; else fail "cargo"   "not found — install Rust: https://rustup.rs"; fi
-    if v=$(rustfmt --version 2>/dev/null);      then ok   "rustfmt" "$v"; else fail "rustfmt" "not found — run: rustup component add rustfmt"; fi
-    if v=$(cargo clippy --version 2>/dev/null); then ok   "clippy"  "$v"; else fail "clippy"  "not found — run: rustup component add clippy"; fi
+    if v=$(cargo --version 2>/dev/null);        then ok   "cargo"   "$v"; else fail "cargo"   "not found - install Rust: https://rustup.rs"; fi
+    if v=$(rustfmt --version 2>/dev/null);      then ok   "rustfmt" "$v"; else fail "rustfmt" "not found - run: rustup component add rustfmt"; fi
+    if v=$(cargo clippy --version 2>/dev/null); then ok   "clippy"  "$v"; else fail "clippy"  "not found - run: rustup component add clippy"; fi
 
     echo ""
     echo "--- Exercise toolchains ---"
-    if v=$(rustc --version 2>/dev/null);   then ok   "rustc"   "$v"; else fail "rustc"   "not found — needed for Rust exercises (install: https://rustup.rs)"; fi
-    if v=$(python3 --version 2>/dev/null); then ok   "python3" "$v"; else fail "python3" "not found — needed for Python exercises (brew install python)"; fi
+    if v=$(rustc --version 2>/dev/null);   then ok   "rustc"   "$v"; else fail "rustc"   "not found - needed for Rust exercises (install: https://rustup.rs)"; fi
+    if v=$(python3 --version 2>/dev/null); then ok   "python3" "$v"; else fail "python3" "not found - needed for Python exercises (brew install python)"; fi
     if v=$(python3 -m pytest --version 2>/dev/null); then
                                                 ok   "pytest"  "$v"
     else
-                                                warn "pytest"  "not found — optional, Python exercises will fall back to unittest"
+                                                warn "pytest"  "not found - optional, Python exercises will fall back to unittest"
     fi
-    if v=$(go version 2>/dev/null);        then ok   "go"      "$v"; else fail "go"      "not found — needed for Go exercises (brew install go)"; fi
+    if v=$(go version 2>/dev/null);        then ok   "go"      "$v"; else fail "go"      "not found - needed for Go exercises (brew install go)"; fi
 
     echo ""
     echo "--- Ripes (RISC-V simulator) ---"
@@ -99,15 +99,15 @@ check-deps:
     elif [[ -x "{{ project_directory }}/ripes/win/Ripes.exe" ]]; then
         ok "ripes" "bundled binary: ripes/win/Ripes.exe"
     else
-        warn "ripes" "not found — RISC-V exercises won't run; set RIPES_PATH or see https://github.com/mortbopet/Ripes/releases"
+        warn "ripes" "not found - RISC-V exercises won't run; set RIPES_PATH or see https://github.com/mortbopet/Ripes/releases"
     fi
 
     echo ""
     if [[ $errors -gt 0 ]]; then
-        echo "✗ $errors error(s) found — fix the above before building or running exercises."
+        echo "✗ $errors error(s) found - fix the above before building or running exercises."
         exit 1
     elif [[ $warnings -gt 0 ]]; then
-        echo "✓ All required tools present ($warnings optional warning(s) — see above)."
+        echo "✓ All required tools present ($warnings optional warning(s) - see above)."
     else
         echo "✓ All dependencies satisfied."
     fi
@@ -129,7 +129,7 @@ setup-macos:
         echo "✓ Homebrew: $(brew --version | head -1)"
     fi
 
-    # ── Rust (via rustup — preferred over the brew formula for development) ───
+    # ── Rust (via rustup - preferred over the brew formula for development) ───
     if ! command -v rustup >/dev/null 2>&1; then
         echo "Installing Rust via rustup..."
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
@@ -175,7 +175,7 @@ setup-macos:
         echo "✓ ripes found in PATH: $(which ripes)"
     elif [[ -x "{{ project_directory }}/ripes/macos/Ripes.app/Contents/MacOS/Ripes" ]]; then
         echo "✓ Bundled binary: ripes/macos/Ripes.app/Contents/MacOS/Ripes"
-        echo "  (lq will use it automatically — no further action needed)"
+        echo "  (lq will use it automatically - no further action needed)"
     else
         echo "  Ripes is not available via Homebrew."
         echo "  Download from: https://github.com/mortbopet/Ripes/releases"

@@ -27,7 +27,7 @@ _start:
 ```
 
 **Key concepts:**
-- `li rd, imm` — load an immediate (constant) value into register rd
-- `add rd, rs1, rs2` — add two registers, store result in rd
-- `addi rd, rs1, imm` — add a register and immediate value
-- `t0`–`t6` — temporary registers (caller-saved)
+- `li rd, imm` - load an immediate (constant) value into register rd
+- `add rd, rs1, rs2` - add two registers, store result in rd
+- `addi rd, rs1, imm` - add a register and immediate value
+- `t0`–`t6` - temporary registers (caller-saved)

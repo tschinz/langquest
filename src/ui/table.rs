@@ -19,7 +19,7 @@ pub struct Column {
 pub struct TableData {
   /// Ordered column definitions.
   pub columns: Vec<Column>,
-  /// Row data — each inner `Vec` must have the same length as `columns`.
+  /// Row data - each inner `Vec` must have the same length as `columns`.
   pub rows: Vec<Vec<String>>,
 }
 

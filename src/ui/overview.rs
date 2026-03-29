@@ -1,4 +1,4 @@
-//! Overview — progress bar, exercise table, tree panel.
+//! Overview - progress bar, exercise table, tree panel.
 //!
 //! Renders the main overview screen consisting of:
 //! * A progress bar showing completed / total exercises.
@@ -71,7 +71,7 @@ pub fn render(
   render_progress_bar(frame, progress_area, modules, exercises, config);
 
   // --- table + optional tree ------------------------------------------
-  // The tree is a side panel — hide it only when the terminal is too narrow
+  // The tree is a side panel - hide it only when the terminal is too narrow
   // to split meaningfully (< 80 columns), not based on height.
   let tree_visible = show_tree && area.width >= 80;
 

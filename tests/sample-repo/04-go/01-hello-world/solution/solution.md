@@ -30,7 +30,7 @@ func main() {
 ```
 
 **Key concepts:**
-- `func Name() Type` — function returning a value
-- `return` — explicitly returns a value (required in Go)
+- `func Name() Type` - function returning a value
+- `return` - explicitly returns a value (required in Go)
 - Uppercase function names are exported (public)
-- `fmt.Println` — prints to stdout
+- `fmt.Println` - prints to stdout

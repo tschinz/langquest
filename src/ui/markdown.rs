@@ -26,7 +26,7 @@ static THEME_SET: LazyLock<ThemeSet> = LazyLock::new(ThemeSet::load_defaults);
 /// The syntect theme applied to all code blocks.
 const CODE_THEME: &str = "base16-ocean.dark";
 
-/// Background colour for code blocks — matches the base16-ocean.dark theme
+/// Background colour for code blocks - matches the base16-ocean.dark theme
 /// background (`#2b303b`) so syntax colours sit on their intended canvas.
 const CODE_BG: Color = Color::Rgb(43, 48, 59);
 
@@ -202,8 +202,8 @@ pub struct PendingOsc8 {
 impl PendingOsc8 {
   /// Write OSC 8 hyperlink sequences directly to `out` (typically stderr).
   ///
-  /// Each link's text is re-printed — with its original colour read back
-  /// from the completed ratatui [`Buffer`] — wrapped between an OSC 8
+  /// Each link's text is re-printed - with its original colour read back
+  /// from the completed ratatui [`Buffer`] - wrapped between an OSC 8
   /// opening (`ESC ] 8 ;; URL BEL`) and closing (`ESC ] 8 ;; BEL`)
   /// sequence.  Because we write the sequences directly to the terminal
   /// *after* the buffer diff, ratatui's width calculation never sees the
@@ -443,7 +443,7 @@ impl Renderer {
       Event::Text(text) => {
         let text = text.into_string();
         if self.in_code_block {
-          // Accumulate all text chunks — pulldown-cmark may split a
+          // Accumulate all text chunks - pulldown-cmark may split a
           // code block into multiple Text events (e.g. inside list
           // items).  We render once at End(CodeBlock).
           self.code_text.push_str(&text);
@@ -863,7 +863,7 @@ mod code_block_layout_tests {
   #[test]
   fn list_item_code_block_merged_into_one() {
     // When pulldown-cmark emits multiple Text events for lines in a list-item
-    // code block, they must be merged into a single highlighted block — not
+    // code block, they must be merged into a single highlighted block - not
     // rendered as separate blocks each with their own top/bottom pads.
     let md = "1. Description:\n\n   ```rust\n   let x = 1;\n   let y = 2;\n   let z = 3;\n   ```\n\n2. Next item";
     let lines = parse_markdown(md, 80);

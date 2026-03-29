@@ -39,7 +39,7 @@ impl Drop for TempDir {
 }
 
 // ===========================================================================
-// Phase 2 — Exercise Discovery
+// Phase 2 - Exercise Discovery
 // ===========================================================================
 
 mod discovery {
@@ -203,7 +203,7 @@ mod discovery {
 }
 
 // ===========================================================================
-// Phase 2 — Frontmatter Parsing
+// Phase 2 - Frontmatter Parsing
 // ===========================================================================
 
 mod frontmatter {
@@ -245,7 +245,7 @@ Some body text.
 }
 
 // ===========================================================================
-// Phase 2 — Config Persistence
+// Phase 2 - Config Persistence
 // ===========================================================================
 
 mod config {
@@ -374,7 +374,7 @@ mod config {
 }
 
 // ===========================================================================
-// Phase 3 — Runner Score Parsing & Verification
+// Phase 3 - Runner Score Parsing & Verification
 // ===========================================================================
 
 mod runner {
@@ -465,7 +465,7 @@ mod runner {
 
     if let Some(exercise) = hello {
       let result = lq::runner::verify(exercise, &lq::config::ProjectConfig::default());
-      // The starter returns "" so tests should fail — we only verify the
+      // The starter returns "" so tests should fail - we only verify the
       // runner doesn't panic and produces a well-formed result.
       assert!(result.threshold > 0.0);
       assert!(result.threshold <= 1.0);
@@ -518,7 +518,7 @@ mod runner {
 }
 
 // ===========================================================================
-// Phase 2+4 — Exercise Status Derivation
+// Phase 2+4 - Exercise Status Derivation
 // ===========================================================================
 
 mod status {
@@ -586,7 +586,7 @@ mod status {
 }
 
 // ===========================================================================
-// End-to-end — Discovery + Config merge
+// End-to-end - Discovery + Config merge
 // ===========================================================================
 
 mod end_to_end {

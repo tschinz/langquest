@@ -9,7 +9,7 @@ use lq::{app, config, exercise};
 
 /// CLI definition for the `lq` binary.
 #[derive(Parser)]
-#[command(name = "lq", version, about = "LangQuest — interactive programming exercises")]
+#[command(name = "lq", version, about = "LangQuest - interactive programming exercises")]
 struct Cli {
   /// Path to exercise repository root
   #[arg(long)]

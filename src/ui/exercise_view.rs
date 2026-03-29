@@ -1,4 +1,4 @@
-//! Exercise View — paged display (Theory / Task / Output / Solution).
+//! Exercise View - paged display (Theory / Task / Output / Solution).
 
 use std::fs;
 
@@ -415,7 +415,7 @@ fn strip_frontmatter(content: &str) -> &str {
   } else if let Some(rest) = after_dashes.strip_prefix('\n') {
     rest
   } else {
-    // "---" followed by other chars or nothing — not valid frontmatter.
+    // "---" followed by other chars or nothing - not valid frontmatter.
     return content;
   };
 
@@ -442,7 +442,7 @@ fn strip_frontmatter(content: &str) -> &str {
     }
   }
 
-  // No closing delimiter found — return content as-is.
+  // No closing delimiter found - return content as-is.
   content
 }
 
@@ -456,7 +456,7 @@ mod tests {
 
   #[test]
   fn scroll_percent_no_scroll_needed() {
-    // content fits — no indicator
+    // content fits - no indicator
     assert_eq!(scroll_percent(0, 10, 20), None);
     assert_eq!(scroll_percent(0, 20, 20), None);
   }

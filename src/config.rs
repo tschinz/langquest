@@ -13,9 +13,9 @@ use crate::error::ConfigError;
 pub struct ExerciseState {
   /// The highest score achieved on this exercise.
   pub best_score: f64,
-  /// Whether the exercise has been passed (sticky — never resets to false).
+  /// Whether the exercise has been passed (sticky - never resets to false).
   pub passed: bool,
-  /// Whether the reference solution has been viewed (sticky — never resets to false).
+  /// Whether the reference solution has been viewed (sticky - never resets to false).
   pub solution_seen: bool,
 }
 
@@ -204,7 +204,7 @@ impl ProjectConfig {
 
   /// Mark the reference solution as seen for the given exercise.
   ///
-  /// This is sticky — once set to `true` it is never reset.
+  /// This is sticky - once set to `true` it is never reset.
   pub fn mark_solution_seen(&mut self, exercise_path: &str) {
     let state = self.exercises.entry(exercise_path.to_owned()).or_default();
 

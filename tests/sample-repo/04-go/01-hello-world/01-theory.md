@@ -24,8 +24,8 @@ func Add(a, b int) int {
 
 In Go, **capitalization matters**:
 
-- `Greeting` — uppercase first letter = **exported** (public)
-- `greeting` — lowercase first letter = unexported (private)
+- `Greeting` - uppercase first letter = **exported** (public)
+- `greeting` - lowercase first letter = unexported (private)
 
 ## String Type
 

@@ -26,7 +26,7 @@ Adding a semicolon turns it into a statement returning `()` (unit type).
 
 ## String Slices
 
-The type `&'static str` is a string slice with a static lifetime — string literals are always this type:
+The type `&'static str` is a string slice with a static lifetime - string literals are always this type:
 
 ```rust
 fn get_text() -> &'static str {
