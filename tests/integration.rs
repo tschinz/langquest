@@ -88,12 +88,12 @@ mod discovery {
     let hello = modules
       .iter()
       .find(|m| m.name == "01-rust")
-      .and_then(|m| m.exercises.iter().find(|e| e.id == "hello_world"));
+      .and_then(|m| m.exercises.iter().find(|e| e.id == "hello_rust"));
 
-    assert!(hello.is_some(), "hello_world exercise not found");
+    assert!(hello.is_some(), "hello_rust exercise not found");
     let hello = hello.unwrap();
 
-    assert_eq!(hello.name, "Hello, World!");
+    assert_eq!(hello.name, "Hello, Rust!");
     assert_eq!(hello.language, lq::exercise::Language::Rust);
     assert!(hello.difficulty >= 1 && hello.difficulty <= 5);
     assert!(!hello.description.is_empty());

@@ -133,8 +133,6 @@ solution_seen = false
 
 You can commit `lq.toml` to share progress across machines, or add it to `.gitignore` for single-user use.
 
----
-
 ## Creating Your Own Exercises
 
 ### File Structure
