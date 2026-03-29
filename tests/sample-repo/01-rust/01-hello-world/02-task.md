@@ -1,40 +1,19 @@
 ---
-id          = "hello_world"
-name        = "Hello, World!"
+id          = "hello_rust"
+name        = "Hello, Rust!"
 language    = "rust"
 difficulty  = 1
-description = "Write your first Rust function that returns a greeting string."
-topics      = ["println", "main", "basic_syntax"]
+description = "Implement a function that returns a greeting string."
+topics      = ["functions", "strings", "return"]
 ---
 
-# Hello, World!
+# Hello, Rust!
 
-## Objective
+Implement the `greeting()` function so it returns the string `"Hello, World!"` exactly.
 
-Make the program print **exactly** `Hello, World!` to standard output.
+## Expected Result
 
-## Instructions
-
-1. Open `main.rs` and find the `greeting()` function.
-2. Replace the `todo!()` macro with an expression that returns the string `"Hello, World!"`.
-3. The `main()` function already calls `greeting()` and prints the result — you only need to fix `greeting()`.
-
-## Requirements
-
-- `greeting()` must return a `&'static str` with the value `"Hello, World!"`.
-- Do **not** modify the `main()` function or the test module.
-
-## Running
-
-```sh
-# Run the program
-cargo run
-
-# Run the tests to verify your solution
-cargo test
-```
-
-## Expected Output
+When the program runs, it should print:
 
 ```
 Hello, World!

@@ -15,5 +15,5 @@ cmd = "python3 -m pytest <file> --tb=short -q"
 cmd = "go test -v ."
 
 [ripes]
-bin = "/Users/zas/work/repo/my/rust/lq/ripes/macos/Ripes.app/Contents/MacOS/Ripes"
+bin = "/Users/zas/work/repo/my/rust/langquest/ripes/macos/Ripes.app/Contents/MacOS/Ripes"
 cmd = "ripes --mode cli -t asm --proc RV32_SS --json --regs --runinfo --src <file>"

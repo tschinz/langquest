@@ -3,41 +3,17 @@ id          = "hello_go"
 name        = "Hello, Go!"
 language    = "go"
 difficulty  = 1
-description = "Write your first Go function that returns a greeting string."
-topics      = ["functions", "strings", "fmt", "basic_syntax"]
+description = "Implement a function that returns a greeting string."
+topics      = ["functions", "strings", "return"]
 ---
 
 # Hello, Go!
 
-## Objective
+Implement the `Greeting()` function so it returns the string `"Hello, World!"` exactly.
 
-Make the program print **exactly** `Hello, World!` to standard output by
-implementing the `Greeting` function.
+## Expected Result
 
-## Instructions
-
-1. Open `main.go` and find the `Greeting` function.
-2. Replace the placeholder `return ""` with an expression that returns the
-   string `"Hello, World!"`.
-3. The `main` function already calls `Greeting()` and prints the result — you
-   only need to fix `Greeting`.
-
-## Requirements
-
-- `Greeting` must return a `string` with the value `"Hello, World!"`.
-- Do **not** modify `main` or the test file `main_test.go`.
-
-## Running
-
-```sh
-# Run the program
-go run main.go
-
-# Run the tests to verify your solution
-go test -v .
-```
-
-## Expected Output
+When run, the program prints:
 
 ```
 Hello, World!
