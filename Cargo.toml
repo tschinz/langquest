@@ -2,6 +2,18 @@
 name = "lq"
 version = "0.1.0"
 edition = "2024"
+authors = ["tschinz"]
+license = "MIT"
+description = "A terminal-based, interactive programming exercise runner and learning tool for Rust, Go, Python, RiscV and Markdown"
+readme = "README.md"
+repository = "https://github.com/tschinz/langquest"
+categories = ["command-line-utilities", "development-tools"]
+keywords = ["learning", "exercise", "interactive", "runner"]
+exclude = [
+  ".github",
+  "tasks",
+  "claude.md",
+]
 
 [lib]
 name = "lq"
