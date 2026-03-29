@@ -10,8 +10,6 @@
 
 A terminal-based, interactive programming exercise runner. Inspired by [Rustlings](https://github.com/rust-lang/rustlings) and [100 Exercises to Learn Rust](https://rust-exercises.com/), LangQuest extends the concept to multiple languages — work through hands-on exercises in **Rust**, **Go**, **Python**, **RISC-V assembly**, and **Markdown** with real-time feedback, progress tracking, and a built-in hint system.
 
----
-
 ## Table of Contents
 
 - [Features](#features)
@@ -29,8 +27,6 @@ A terminal-based, interactive programming exercise runner. Inspired by [Rustling
 - [Dependencies](#dependencies)
 - [License](#license)
 
----
-
 ## Features
 
 - **Multi-language support** — Rust, Go, Python, RISC-V assembly, and Markdown/conceptual exercises
@@ -40,8 +36,6 @@ A terminal-based, interactive programming exercise runner. Inspired by [Rustling
 - **Syntax-highlighted solutions** — reference code and prose explanations, gated until pass or explicit unlock
 - **Overview with tree panel** — scrollable exercise table and module/exercise tree with live progress
 - **Persistent progress** — `lq.toml` at the repo root tracks scores, pass status, and solution visibility
-
----
 
 ## Installation
 
@@ -74,8 +68,6 @@ Depending on which languages your exercises use, install the corresponding toolc
 | **Go** | Install from [go.dev](https://go.dev/dl/) or via package manager |
 | **RISC-V** | GNU toolchain (`apt install gcc-riscv64-linux-gnu`) or [Ripes](https://github.com/mortbopet/Ripes) simulator |
 | **Markdown** | No additional tools required — verification is regex-based |
-
----
 
 ## Getting Started
 
@@ -305,6 +297,7 @@ hints    = [
 ]
 keywords = ["mut", "let", "i32"]
 ---
+```
 
 ## Explanation
 
@@ -321,8 +314,6 @@ free-text answers via regex matching.
 | `hints` | Ordered list revealed one at a time with `h` |
 | `keywords` | Regex patterns for scoring Markdown exercises |
 | body | Prose explanation shown on the Solution page |
-
----
 
 ## CLI Reference
 
@@ -355,8 +346,6 @@ lq status
 lq --reset
 ```
 
----
-
 ## Dependencies
 
 | Crate | Purpose |
@@ -371,8 +360,6 @@ lq --reset
 | `regex` | Keyword matching for Markdown exercises |
 | `anyhow` | Error propagation |
 | `thiserror` | Typed domain errors |
-
----
 
 ## License
 
