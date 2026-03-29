@@ -1,6 +1,6 @@
 # TODO: implement the greeting function
 def greeting():
-    return "Hello, World!"
+    return ""
 
 
 import unittest

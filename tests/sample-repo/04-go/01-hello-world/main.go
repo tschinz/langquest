@@ -4,7 +4,7 @@ import "fmt"
 
 // TODO: implement the Greeting function
 func Greeting() string {
-  return "Hello, World!"
+  return ""
 }
 
 func main() {

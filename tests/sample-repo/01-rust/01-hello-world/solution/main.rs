@@ -1,10 +1,10 @@
 /// Returns the greeting string "Hello, World!"
-/// 
+///
 /// In Rust, string literals are of type `&'static str` - a reference
 /// to a string that lives for the entire program duration.
 fn greeting() -> &'static str {
     // No semicolon = this expression is returned
-    "Hello, World!"
+    todo!()
 }
 
 fn main() {
