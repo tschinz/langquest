@@ -230,7 +230,7 @@ clippy:
 
 # Format source with rustfmt (edition 2024)
 rustfmt:
-    cargo fmt --all -- --edition {{ rust_edition }}
+    cargo fmt --all
 
 ##################################################
 # Quick-test shortcuts (uses test_repo)
