@@ -10,6 +10,8 @@
 
 A terminal-based, interactive programming exercise runner. Inspired by [Rustlings](https://github.com/rust-lang/rustlings) and [100 Exercises to Learn Rust](https://rust-exercises.com/), LangQuest extends the concept to multiple languages — work through hands-on exercises in **Rust**, **Go**, **Python**, **RISC-V assembly**, and **Markdown** with real-time feedback, progress tracking, and a built-in hint system.
 
+![demo](img/lq-demo.gif)
+
 ## Table of Contents
 
 - [Features](#features)
