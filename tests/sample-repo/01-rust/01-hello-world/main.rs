@@ -1,6 +1,6 @@
 // TODO: implement the greeting function
 fn greeting() -> &'static str {
-  "Hello, World!"k
+  ""
 }
 
 fn main() {
