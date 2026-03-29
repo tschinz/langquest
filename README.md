@@ -249,19 +249,15 @@ def test_add_negative():
 **RISC-V Assembly** (`main.asm`) — Uses `EXPECT_*` directives:
 
 ```asm
-; EXPECT_EXIT: 0
-; EXPECT_STDOUT: Hello, World!
+# EXPECT_REG: x7 42
 
-; TODO: implement the program
-.global _start
-_start:
-    ; your code here
+# TODO: implement the program
+# your code here
 ```
 
 | Directive | Description |
 |-----------|-------------|
-| `EXPECT_EXIT: N` | Process must exit with code N |
-| `EXPECT_STDOUT: S` | stdout must contain S as substring |
+| `EXPECT_REG: <name> <value>` | register name and expected 32-bit value |
 
 **Markdown** (`main.md`) — Free-text answers matched against keywords:
 
