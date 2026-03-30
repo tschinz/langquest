@@ -49,11 +49,11 @@ mod discovery {
   fn discovers_all_modules() {
     let (modules, errors) = lq::exercise::discover_exercises(&sample_repo());
 
-    // There should be 4 modules in the fixture repo.
+    // There should be 5 modules in the fixture repo.
     assert_eq!(
       modules.len(),
-      4,
-      "expected 4 modules, got {}: {:?}",
+      5,
+      "expected 5 modules, got {}: {:?}",
       modules.len(),
       modules.iter().map(|m| &m.name).collect::<Vec<_>>()
     );
@@ -178,6 +178,20 @@ mod discovery {
     assert!(riscv.is_some());
     for ex in &riscv.unwrap().exercises {
       assert_eq!(ex.language, lq::exercise::Language::Riscv);
+    }
+  }
+
+  #[test]
+  fn markdown_exercises_detected() {
+    let (modules, _) = lq::exercise::discover_exercises(&sample_repo());
+
+    let md_mod = modules.iter().find(|m| m.name == "05-markdown");
+    assert!(md_mod.is_some(), "05-markdown module not found");
+    let md_mod = md_mod.unwrap();
+
+    assert!(!md_mod.exercises.is_empty(), "expected at least 1 markdown exercise");
+    for ex in &md_mod.exercises {
+      assert_eq!(ex.language, lq::exercise::Language::Text);
     }
   }
 

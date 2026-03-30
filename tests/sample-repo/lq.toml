@@ -1,6 +1,18 @@
+current_exercise = "05-markdown/01-rust-ownership"
+
 [exercises."01-rust/01-hello-world"]
 best_score = 0.0
 passed = false
+solution_seen = false
+
+[exercises."03-riscv/01-hello-riscv"]
+best_score = 0.25
+passed = false
+solution_seen = true
+
+[exercises."05-markdown/01-rust-ownership"]
+best_score = 1.0
+passed = true
 solution_seen = false
 
 [rust]
