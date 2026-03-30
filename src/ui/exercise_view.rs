@@ -264,6 +264,7 @@ fn build_output_lines<'a>(exercise: &'a Exercise, hints_revealed: usize, solutio
     let total_hints = solution_data.hints.len();
     let reveal_count = hints_revealed.min(total_hints);
 
+    // Show regular hints
     for i in 0..reveal_count {
       let hint_text = solution_data.hints.get(i).cloned().unwrap_or_default();
       lines.push(Line::from(Span::styled(

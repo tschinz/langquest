@@ -258,6 +258,8 @@ def test_add_negative():
 
 ```
 
+> **Note:** The `<!-- Write your answer below -->` marker line is **mandatory** for text exercises. Keywords are only searched in the content that appears after this marker, so students can read the question without accidentally matching keywords in it.
+
 #### Solution Folder
 
 **solution/main.*** - The complete reference solution:

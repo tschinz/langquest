@@ -885,10 +885,19 @@ fn verify_markdown(exercise: &Exercise) -> VerificationResult {
     return VerificationResult::zero("No keywords defined in solution data.".to_string(), threshold);
   }
 
-  let content = match fs::read_to_string(&exercise.source_path) {
+  let full_content = match fs::read_to_string(&exercise.source_path) {
     Ok(s) => s,
     Err(e) => {
       return VerificationResult::zero(format!("Failed to read source file: {e}"), threshold);
+    }
+  };
+
+  // Only search for keywords in content after the answer marker
+  const ANSWER_MARKER: &str = "<!-- Write your answer below -->";
+  let content = match full_content.find(ANSWER_MARKER) {
+    Some(pos) => &full_content[pos + ANSWER_MARKER.len()..],
+    None => {
+      return VerificationResult::zero(format!("Missing required marker line: {ANSWER_MARKER}"), threshold);
     }
   };
 
@@ -897,7 +906,7 @@ fn verify_markdown(exercise: &Exercise) -> VerificationResult {
 
   for kw in keywords {
     let found = match RegexBuilder::new(kw).case_insensitive(true).build() {
-      Ok(re) => re.is_match(&content),
+      Ok(re) => re.is_match(content),
       // If the keyword is not a valid regex pattern, fall back to a
       // plain case-insensitive substring search.
       Err(_) => content.to_lowercase().contains(&kw.to_lowercase()),
@@ -915,10 +924,7 @@ fn verify_markdown(exercise: &Exercise) -> VerificationResult {
 
   let mut output = format!("{matched}/{total} keywords matched.");
   if !unmatched.is_empty() {
-    output.push_str("\n\nMissing concepts:");
-    for kw in &unmatched {
-      output.push_str(&format!("\n  • {kw}"));
-    }
+    output.push_str(&format!("\n\n{} concepts missing. Use hints to reveal them.", unmatched.len()));
   }
 
   VerificationResult {

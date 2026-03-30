@@ -515,7 +515,8 @@ impl App {
       ExercisePage::Solution => return,
     }
 
-    let total = self.current_exercise().solution_data.as_ref().map_or(0, |sd| sd.hints.len());
+    let exercise = self.current_exercise();
+    let total = exercise.solution_data.as_ref().map_or(0, |sd| sd.hints.len());
 
     if self.hints_revealed < total {
       // Still hints left - reveal the next one and clear any pending flag.
