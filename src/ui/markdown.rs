@@ -15,6 +15,8 @@ use syntect::highlighting::{FontStyle, ThemeSet};
 use syntect::parsing::SyntaxSet;
 use syntect::util::LinesWithEndings;
 
+use super::term_caps::{chars, colors, supports_osc8};
+
 // ── Syntax highlighting ───────────────────────────────────────────────────────
 
 /// Syntect syntax definitions, loaded once at first use.
@@ -28,7 +30,10 @@ const CODE_THEME: &str = "base16-ocean.dark";
 
 /// Background colour for code blocks - matches the base16-ocean.dark theme
 /// background (`#2b303b`) so syntax colours sit on their intended canvas.
-const CODE_BG: Color = Color::Rgb(43, 48, 59);
+/// Uses term_caps for cross-platform color support.
+fn code_bg() -> Color {
+  colors::code_bg()
+}
 
 /// Render `code` with full syntax highlighting.
 ///
@@ -37,6 +42,7 @@ const CODE_BG: Color = Color::Rgb(43, 48, 59);
 pub(crate) fn highlight_code_block(code: &str, lang: &str, width: u16) -> Vec<Line<'static>> {
   let ps = &*SYNTAX_SET;
   let ts = &*THEME_SET;
+  let bg = code_bg();
 
   let syntax = if lang.is_empty() {
     ps.find_syntax_plain_text()
@@ -70,8 +76,8 @@ pub(crate) fn highlight_code_block(code: &str, lang: &str, width: u16) -> Vec<Li
           .into_iter()
           .filter(|(_, text)| !text.is_empty())
           .map(|(style, text)| {
-            let fg = Color::Rgb(style.foreground.r, style.foreground.g, style.foreground.b);
-            let mut s = Style::default().fg(fg).bg(CODE_BG);
+            let fg = colors::rgb(style.foreground.r, style.foreground.g, style.foreground.b);
+            let mut s = Style::default().fg(fg).bg(bg);
             if style.font_style.contains(FontStyle::BOLD) {
               s = s.add_modifier(Modifier::BOLD);
             }
@@ -84,17 +90,18 @@ pub(crate) fn highlight_code_block(code: &str, lang: &str, width: u16) -> Vec<Li
             Span::styled(text.trim_end_matches('\n').to_string(), s)
           })
           .collect();
-        content.push(code_line(spans, i + 1, num_width, width));
+        content.push(code_line(spans, i + 1, num_width, width, bg));
       }
       Err(_) => {
         content.push(code_line(
           vec![Span::styled(
             source_line.trim_end_matches('\n').to_string(),
-            Style::default().fg(Color::Yellow).bg(CODE_BG),
+            Style::default().fg(Color::Yellow).bg(bg),
           )],
           i + 1,
           num_width,
           width,
+          bg,
         ));
       }
     }
@@ -108,14 +115,16 @@ fn plain_code_lines(code: &str, width: u16) -> Vec<Line<'static>> {
   if src.is_empty() {
     return Vec::new();
   }
+  let bg = code_bg();
   let num_width = src.len().to_string().len().max(1);
   let mut lines = Vec::with_capacity(src.len());
   for (i, l) in src.iter().enumerate() {
     lines.push(code_line(
-      vec![Span::styled(l.to_string(), Style::default().fg(Color::Yellow).bg(CODE_BG))],
+      vec![Span::styled(l.to_string(), Style::default().fg(Color::Yellow).bg(bg))],
       i + 1,
       num_width,
       width,
+      bg,
     ));
   }
   lines
@@ -129,31 +138,33 @@ fn plain_code_lines(code: &str, width: u16) -> Vec<Line<'static>> {
 /// ```
 /// The trailing pad span explicitly fills the row to `width` so the background
 /// covers the full terminal width regardless of ratatui's line-style behaviour.
-fn code_line(spans: Vec<Span<'static>>, line_num: usize, num_width: usize, width: u16) -> Line<'static> {
-  // Fixed prefix length: 1 (left pad) + num_width (number) + 5 ("  │  ")
-  let prefix_len = 1 + num_width + 5;
+fn code_line(spans: Vec<Span<'static>>, line_num: usize, num_width: usize, width: u16, bg: Color) -> Line<'static> {
+  // Get the gutter separator (Unicode or ASCII depending on terminal)
+  let gutter_sep = chars::gutter_sep();
+  // Fixed prefix length: 1 (left pad) + num_width (number) + gutter_sep length
+  let prefix_len = 1 + num_width + gutter_sep.chars().count();
   let code_chars: usize = spans.iter().map(|s| s.content.chars().count()).sum();
   let used = prefix_len + code_chars;
   let trailing = (width as usize).saturating_sub(used);
 
   let mut all = Vec::with_capacity(spans.len() + 4);
   // 1-char left padding.
-  all.push(Span::styled(" ", Style::default().bg(CODE_BG)));
+  all.push(Span::styled(" ", Style::default().bg(bg)));
   // Line number, right-aligned and muted.
   all.push(Span::styled(
     format!("{:>num_width$}", line_num),
-    Style::default().fg(Color::Rgb(100, 105, 128)).bg(CODE_BG),
+    Style::default().fg(colors::code_gutter_fg()).bg(bg),
   ));
-  // Gutter separator.
-  all.push(Span::styled("  │  ", Style::default().fg(Color::Rgb(55, 60, 78)).bg(CODE_BG)));
+  // Gutter separator (uses term_caps for cross-platform char).
+  all.push(Span::styled(gutter_sep.to_string(), Style::default().fg(colors::code_gutter_sep_fg()).bg(bg)));
   // Code content.
   all.extend(spans);
   // Trailing spaces to fill the rest of the row.
   if trailing > 0 {
-    all.push(Span::styled(" ".repeat(trailing), Style::default().bg(CODE_BG)));
+    all.push(Span::styled(" ".repeat(trailing), Style::default().bg(bg)));
   }
   let mut line = Line::from(all);
-  line.style = Style::default().bg(CODE_BG);
+  line.style = Style::default().bg(bg);
   line
 }
 
@@ -211,12 +222,20 @@ impl PendingOsc8 {
   ///
   /// **Must be called after [`Terminal::draw`] returns.**  Callers are
   /// responsible for flushing `out` after all pending sets are written.
+  ///
+  /// On terminals that don't support OSC 8 (e.g., Windows CMD), this
+  /// function returns early without writing any escape sequences.
   pub fn write_to<W: io::Write>(&self, buf: &Buffer, out: &mut W) -> io::Result<()> {
     use crossterm::{
       cursor::{Hide, MoveTo, RestorePosition, SavePosition, Show},
       queue,
       style::{Attribute, Print, ResetColor, SetAttribute, SetForegroundColor},
     };
+
+    // Skip OSC 8 on terminals that don't support it (e.g., Windows CMD)
+    if !supports_osc8() {
+      return Ok(());
+    }
 
     if self.links.is_empty() {
       return Ok(());
@@ -423,12 +442,12 @@ impl Renderer {
     "  ".repeat(self.list_stack.len().saturating_sub(1))
   }
 
-  /// Blockquote `│ ` leader for the current nesting depth.
+  /// Blockquote `│ ` (or `| ` on limited terminals) leader for the current nesting depth.
   fn blockquote_prefix(&self) -> String {
     if self.blockquote_depth == 0 {
       String::new()
     } else {
-      "│ ".repeat(self.blockquote_depth as usize)
+      format!("{} ", chars::vertical()).repeat(self.blockquote_depth as usize)
     }
   }
 
@@ -828,9 +847,10 @@ mod tests {
 mod code_block_layout_tests {
   use super::*;
 
-  /// Returns true if the line carries the CODE_BG background colour.
+  /// Returns true if the line carries the code_bg() background colour.
   fn has_code_bg(l: &Line<'_>) -> bool {
-    l.style.bg == Some(CODE_BG) || l.spans.iter().any(|s| s.style.bg == Some(CODE_BG))
+    let bg = code_bg();
+    l.style.bg == Some(bg) || l.spans.iter().any(|s| s.style.bg == Some(bg))
   }
 
   /// Find all (index, has_code_bg) pairs for a rendered markdown string.

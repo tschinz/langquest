@@ -11,6 +11,7 @@
 use ratatui::prelude::*;
 use ratatui::widgets::Paragraph;
 
+use super::term_caps::chars;
 use crate::app::{ExercisePage, View};
 
 // ── Heights ───────────────────────────────────────────────────────────────────
@@ -80,18 +81,23 @@ pub fn render_collapsed(frame: &mut Frame, area: Rect) {
 // ── Row 1: view + sub-view tabs ───────────────────────────────────────────────
 
 fn render_tabs_row(frame: &mut Frame, area: Rect, view: View, page: ExercisePage, show_tree: bool, solution_accessible: bool) {
+  // Use term_caps for cross-platform separator characters
+  let use_unicode = chars::vertical() == "│";
+  let slash_sep: &'static str = if use_unicode { "  ╱  " } else { "  /  " };
+  let vert_sep: &'static str = if use_unicode { "     │     " } else { "     |     " };
+
   let mut spans: Vec<Span<'static>> = vec![
     Span::raw("  "),
     top_tab("Exercise", view == View::ExerciseView),
-    dim_sep("  ╱  "),
+    dim_sep(slash_sep),
     top_tab("Overview", view == View::Overview),
-    dim_sep("  ╱  "),
+    dim_sep(slash_sep),
     top_tab("About", view == View::About),
   ];
 
   // ── Vertical rule (hidden on the About page which has no sub-tabs) ─────────
   if view != View::About {
-    spans.push(dim_sep("     │     "));
+    spans.push(dim_sep(vert_sep));
   }
 
   // ── Sub-view tabs (context-sensitive) ─────────────────────────────────────
@@ -134,10 +140,18 @@ fn render_tabs_row(frame: &mut Frame, area: Rect, view: View, page: ExercisePage
 // ── Row 2: keyboard hint badges ───────────────────────────────────────────────
 
 fn render_hints_row(frame: &mut Frame, area: Rect, view: View) {
-  let hints: &[(&str, &str)] = match view {
-    View::ExerciseView => &[
-      ("← →", "page"),
-      ("↑ ↓", "scroll"),
+  // Use term_caps for cross-platform arrow characters
+  let (left_right, up_down) = if chars::vertical() == "│" {
+    ("← →", "↑ ↓")
+  } else {
+    ("<- ->", "^ v")
+  };
+
+  // Build hints dynamically to support cross-platform arrow characters
+  let hints: Vec<(&str, &str)> = match view {
+    View::ExerciseView => vec![
+      (left_right, "page"),
+      (up_down, "scroll"),
       ("j / k", "exercise"),
       ("e", "edit"),
       ("h", "hint"),
@@ -146,8 +160,8 @@ fn render_hints_row(frame: &mut Frame, area: Rect, view: View) {
       ("q", "quit"),
       ("m", "menu"),
     ],
-    View::Overview => &[
-      ("↑ ↓", "navigate"),
+    View::Overview => vec![
+      (up_down, "navigate"),
       ("Enter", "open"),
       ("t", "tree"),
       ("o", "exercise"),
@@ -155,7 +169,7 @@ fn render_hints_row(frame: &mut Frame, area: Rect, view: View) {
       ("q", "quit"),
       ("m", "menu"),
     ],
-    View::About => &[("↑ ↓", "scroll"), ("a", "back"), ("q", "quit"), ("m", "menu")],
+    View::About => vec![(up_down, "scroll"), ("a", "back"), ("q", "quit"), ("m", "menu")],
   };
 
   let mut spans: Vec<Span<'static>> = Vec::new();

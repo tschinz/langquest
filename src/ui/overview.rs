@@ -11,6 +11,7 @@ use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 
 use super::table::{self, Column, TableData};
+use super::term_caps::chars;
 use crate::config::ProjectConfig;
 use crate::exercise::{ExerciseStatus, Module};
 
@@ -232,7 +233,7 @@ fn render_tree_panel(frame: &mut Frame, area: Rect, modules: &[Module], exercise
       let state = config.get_state(&ex.relative_path);
       let status = derive_status(&state);
       let is_last = ei + 1 == exercise_count;
-      let connector = if is_last { "+--" } else { "|--" };
+      let connector = if is_last { chars::tree_last() } else { chars::tree_branch() };
 
       let is_selected = selected == Some((mi, ei));
 

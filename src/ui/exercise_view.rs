@@ -44,6 +44,7 @@ const TOPBAR_PATH_FG: Color = Color::Rgb(55, 55, 72);
 const TOPBAR_SEP_FG: Color = Color::Rgb(55, 55, 72);
 
 use crate::ui::markdown::{LinkSpan, PendingOsc8, parse_markdown_with_links};
+use crate::ui::term_caps::chars;
 
 use crate::app::{App, ExercisePage};
 use crate::config::ExerciseState;
@@ -110,10 +111,12 @@ fn render_exercise(frame: &mut Frame, area: Rect, params: &ViewParams<'_>) -> Op
 
 /// Render the 1-line top bar showing the exercise path and name.
 fn render_topbar(frame: &mut Frame, area: Rect, exercise: &Exercise) {
+  // Use term_caps for cross-platform separator character
+  let sep = format!("     {}     ", chars::vertical());
   let spans = vec![
     Span::raw("  "),
     Span::styled(exercise.relative_path.clone(), Style::default().fg(TOPBAR_PATH_FG)),
-    Span::styled("     │     ", Style::default().fg(TOPBAR_SEP_FG)),
+    Span::styled(sep, Style::default().fg(TOPBAR_SEP_FG)),
     Span::styled(exercise.name.clone(), Style::default().fg(TOPBAR_NAME_FG).add_modifier(Modifier::BOLD)),
   ];
 
@@ -320,8 +323,10 @@ fn render_solution(frame: &mut Frame, area: Rect, exercise: &Exercise, config_st
   if let Some(ref solution_path) = exercise.solution_source {
     match fs::read_to_string(solution_path) {
       Ok(source) => {
+        // Use term_caps for cross-platform separator characters
+        let sep_char = chars::horizontal();
         lines.push(Line::from(Span::styled(
-          "── Reference Solution ──",
+          format!("{0}{0} Reference Solution {0}{0}", sep_char),
           Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
         )));
         lines.push(Line::from(""));
@@ -363,8 +368,10 @@ fn render_solution(frame: &mut Frame, area: Rect, exercise: &Exercise, config_st
 fn append_explanation(lines: &mut Vec<Line<'static>>, solution_data: &crate::exercise::SolutionData, width: u16) -> Vec<LinkSpan> {
   if !lines.is_empty() {
     lines.push(Line::from(""));
+    // Use term_caps for cross-platform separator characters
+    let sep_char = chars::horizontal();
     lines.push(Line::from(Span::styled(
-      "────────────────────────",
+      sep_char.repeat(24),
       Style::default().add_modifier(Modifier::DIM),
     )));
     lines.push(Line::from(""));

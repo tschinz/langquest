@@ -6,3 +6,4 @@ pub mod markdown;
 pub mod overview;
 pub mod statusbar;
 pub mod table;
+pub mod term_caps;
