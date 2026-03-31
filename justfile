@@ -14,6 +14,10 @@ version := "0.1.0"
 url := "https://github.com/tschinz/langquest"
 test_repo := justfile_directory() / "tests" / "sample-repo"
 
+# For windows shell to be supported (suppose code is multi-platforms ready)
+set shell := ["bash", "-uc"]
+set windows-shell := ["cmd.exe", "/c"]
+
 ##################################################
 # Default
 #
