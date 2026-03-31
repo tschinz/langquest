@@ -12,6 +12,7 @@ use crate::config::{self, ProjectConfig};
 use crate::exercise::{Exercise, ExerciseStatus, Module, discover_exercises};
 use crate::runner::{self, ExerciseWatcher, VerificationResult};
 use crate::ui;
+use crate::ui::cache::RenderCache;
 use crate::ui::markdown::PendingOsc8;
 
 /// Which top-level view is active.
@@ -100,6 +101,12 @@ pub struct App {
   pub watcher: Option<ExerciseWatcher>,
   /// Whether the "unlock solution?" warning is awaiting a second `h` press.
   pub solution_unlock_pending: bool,
+  /// Cache for parsed markdown content to avoid re-parsing every frame.
+  pub render_cache: RenderCache,
+  /// Track if a redraw is needed (dirty flag for optimization).
+  pub needs_redraw: bool,
+  /// Last terminal width to detect resize.
+  last_width: u16,
 }
 
 impl App {
@@ -144,7 +151,7 @@ impl App {
       config,
       config_path: cfg_path,
       current_index,
-      view: View::ExerciseView,
+      view: View::Overview,
       page: ExercisePage::Theory,
       hints_revealed: 0,
       last_result: None,
@@ -154,6 +161,9 @@ impl App {
       scroll_offset: 0,
       watcher: None,
       solution_unlock_pending: false,
+      render_cache: RenderCache::new(),
+      needs_redraw: true,
+      last_width: 0,
     };
 
     app.setup_watcher();
@@ -270,17 +280,29 @@ impl App {
   /// Inner event loop, separated so cleanup always runs.
   fn event_loop(&mut self, terminal: &mut Terminal<CrosstermBackend<std::io::Stderr>>) -> Result<()> {
     loop {
-      let mut pending: Option<PendingOsc8> = None;
-      let completed = terminal.draw(|frame| {
-        pending = self.render(frame);
-      })?;
+      // Check for terminal resize
+      let size = terminal.size()?;
+      if size.width != self.last_width {
+        self.last_width = size.width;
+        self.render_cache.clear(); // Width changed, invalidate cache
+        self.needs_redraw = true;
+      }
 
-      // Apply OSC 8 hyperlinks directly to the terminal after the frame
-      // is flushed - bypasses ratatui's buffer diff width calculation.
-      if let Some(ref p) = pending {
-        let mut stderr = std::io::stderr();
-        p.write_to(completed.buffer, &mut stderr)?;
-        stderr.flush()?;
+      // Only redraw when needed
+      if self.needs_redraw {
+        self.needs_redraw = false;
+        let mut pending: Option<PendingOsc8> = None;
+        let completed = terminal.draw(|frame| {
+          pending = self.render(frame);
+        })?;
+
+        // Apply OSC 8 hyperlinks directly to the terminal after the frame
+        // is flushed - bypasses ratatui's buffer diff width calculation.
+        if let Some(ref p) = pending {
+          let mut stderr = std::io::stderr();
+          p.write_to(completed.buffer, &mut stderr)?;
+          stderr.flush()?;
+        }
       }
 
       // Check for file-change events from the watcher.
@@ -293,6 +315,7 @@ impl App {
         if changed {
           self.run_verify();
           self.save_config();
+          self.needs_redraw = true;
         }
       }
 
@@ -323,59 +346,82 @@ impl App {
     }
 
     match key.code {
-      KeyCode::Char('q') | KeyCode::Esc => true,
+    KeyCode::Char('q') | KeyCode::Esc => true,
 
-      KeyCode::Char('m') => {
-        self.show_menu = !self.show_menu;
-        false
-      }
+    KeyCode::Char('m') => {
+      self.show_menu = !self.show_menu;
+      self.needs_redraw = true;
+      false
+    }
 
       KeyCode::Left => {
         self.handle_left();
+        self.needs_redraw = true;
         false
       }
       KeyCode::Right => {
         self.handle_right();
+        self.needs_redraw = true;
         false
       }
-      KeyCode::Tab | KeyCode::Char('o') => {
+      KeyCode::Tab => {
         self.handle_tab();
+        self.needs_redraw = true;
+        false
+      }
+      KeyCode::Char('o') => {
+        // 'o' only works from ExerciseView to go to Overview
+        if self.view == View::ExerciseView {
+          self.view = View::Overview;
+          self.overview_cursor = self.current_index;
+          self.scroll_offset = 0;
+          self.needs_redraw = true;
+        }
         false
       }
       KeyCode::Char('k') => {
         self.handle_next();
+        self.needs_redraw = true;
         false
       }
       KeyCode::Char('j') => {
         self.handle_prev();
+        self.needs_redraw = true;
         false
       }
       KeyCode::Char('h') => {
         self.handle_hint();
+        self.needs_redraw = true;
         false
       }
       KeyCode::Up => {
         self.handle_scroll_up();
+        self.needs_redraw = true;
         false
       }
       KeyCode::Down => {
         self.handle_scroll_down();
+        self.needs_redraw = true;
         false
       }
       KeyCode::PageUp => {
         self.handle_page_up();
+        self.needs_redraw = true;
         false
       }
       KeyCode::PageDown => {
         self.handle_page_down();
+        self.needs_redraw = true;
         false
       }
       KeyCode::Enter => {
         self.handle_enter();
+        self.needs_redraw = true;
         false
       }
       KeyCode::Char('t') => {
         self.handle_toggle_tree();
+        self.needs_redraw = true;
         false
       }
       KeyCode::Char('e') => {
@@ -384,6 +430,7 @@ impl App {
       }
       KeyCode::Char('a') => {
         self.handle_about();
+        self.needs_redraw = true;
         false
       }
       _ => false,

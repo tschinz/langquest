@@ -8,6 +8,31 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::ConfigError;
 
+/// Display settings for the TUI.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DisplayConfig {
+  /// Whether to show line numbers in code blocks.
+  #[serde(default = "default_true")]
+  pub line_numbers: bool,
+  /// Whether to enable syntax highlighting in code blocks.
+  #[serde(default = "default_true")]
+  pub syntax_highlighting: bool,
+}
+
+/// Helper for serde default = true.
+fn default_true() -> bool {
+  true
+}
+
+impl Default for DisplayConfig {
+  fn default() -> Self {
+    Self {
+      line_numbers: true,
+      syntax_highlighting: true,
+    }
+  }
+}
+
 /// State tracking for a single exercise.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExerciseState {
@@ -123,6 +148,9 @@ pub struct ProjectConfig {
   /// Per-exercise state, keyed by relative path. Uses `BTreeMap` for sorted,
   /// deterministic TOML output.
   pub exercises: BTreeMap<String, ExerciseState>,
+  /// Display settings for the TUI (line numbers, syntax highlighting).
+  #[serde(default)]
+  pub display: DisplayConfig,
   /// Rust toolchain settings.  Written to `lq.toml` on first save so the
   /// user can customise the command without recompiling.
   #[serde(default)]

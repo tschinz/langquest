@@ -88,11 +88,9 @@ fn render_tabs_row(frame: &mut Frame, area: Rect, view: View, page: ExercisePage
 
   let mut spans: Vec<Span<'static>> = vec![
     Span::raw("  "),
-    top_tab("Exercise", view == View::ExerciseView),
-    dim_sep(slash_sep),
     top_tab("Overview", view == View::Overview),
     dim_sep(slash_sep),
-    top_tab("About", view == View::About),
+    top_tab("Exercise", view == View::ExerciseView),
   ];
 
   // ── Vertical rule (hidden on the About page which has no sub-tabs) ─────────
@@ -164,7 +162,6 @@ fn render_hints_row(frame: &mut Frame, area: Rect, view: View) {
       (up_down, "navigate"),
       ("Enter", "open"),
       ("t", "tree"),
-      ("o", "exercise"),
       ("a", "about"),
       ("q", "quit"),
       ("m", "menu"),

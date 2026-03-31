@@ -43,11 +43,12 @@ const TOPBAR_NAME_FG: Color = Color::White;
 const TOPBAR_PATH_FG: Color = Color::Rgb(55, 55, 72);
 const TOPBAR_SEP_FG: Color = Color::Rgb(55, 55, 72);
 
-use crate::ui::markdown::{LinkSpan, PendingOsc8, parse_markdown_with_links};
+use crate::ui::cache::{CachedContent, ContentType, RenderCache};
+use crate::ui::markdown::{CodeBlockOptions, LinkSpan, PendingOsc8, parse_markdown_with_links_opts};
 use crate::ui::term_caps::chars;
 
 use crate::app::{App, ExercisePage};
-use crate::config::ExerciseState;
+use crate::config::{DisplayConfig, ExerciseState};
 use crate::exercise::Exercise;
 use crate::runner::VerificationResult;
 
@@ -65,6 +66,7 @@ struct ViewParams<'a> {
   last_result: Option<&'a VerificationResult>,
   config_state: ExerciseState,
   scroll_offset: usize,
+  display: DisplayConfig,
 }
 
 // ---------------------------------------------------------------------------
@@ -80,6 +82,7 @@ pub fn render(app: &mut App, frame: &mut Frame, area: Rect) -> Option<PendingOsc
   let last_result = app.last_result.as_ref();
   let config_state = app.config.get_state(&exercise.relative_path);
   let scroll_offset = app.scroll_offset;
+  let display = app.config.display.clone();
 
   let params = ViewParams {
     exercise: &exercise,
@@ -89,9 +92,10 @@ pub fn render(app: &mut App, frame: &mut Frame, area: Rect) -> Option<PendingOsc
     last_result,
     config_state,
     scroll_offset,
+    display,
   };
 
-  render_exercise(frame, area, &params)
+  render_exercise(frame, area, &params, &mut app.render_cache)
 }
 
 // ---------------------------------------------------------------------------
@@ -99,14 +103,14 @@ pub fn render(app: &mut App, frame: &mut Frame, area: Rect) -> Option<PendingOsc
 // ---------------------------------------------------------------------------
 
 /// Render the exercise view with bundled parameters.
-fn render_exercise(frame: &mut Frame, area: Rect, params: &ViewParams<'_>) -> Option<PendingOsc8> {
+fn render_exercise(frame: &mut Frame, area: Rect, params: &ViewParams<'_>, cache: &mut RenderCache) -> Option<PendingOsc8> {
   let rows = Layout::default()
     .direction(Direction::Vertical)
     .constraints([Constraint::Length(1), Constraint::Min(1)])
     .split(area);
 
   render_topbar(frame, rows[0], params.exercise);
-  render_content(frame, rows[1], params)
+  render_content(frame, rows[1], params, cache)
 }
 
 /// Render the 1-line top bar showing the exercise path and name.
@@ -127,10 +131,14 @@ fn render_topbar(frame: &mut Frame, area: Rect, exercise: &Exercise) {
 // Content dispatcher
 // ---------------------------------------------------------------------------
 
-fn render_content(frame: &mut Frame, area: Rect, params: &ViewParams<'_>) -> Option<PendingOsc8> {
+fn render_content(frame: &mut Frame, area: Rect, params: &ViewParams<'_>, cache: &mut RenderCache) -> Option<PendingOsc8> {
+  let code_opts = CodeBlockOptions {
+    line_numbers: params.display.line_numbers,
+    syntax_highlighting: params.display.syntax_highlighting,
+  };
   match params.page {
-    ExercisePage::Theory => render_theory(frame, area, params.exercise, params.scroll_offset),
-    ExercisePage::Task => render_task(frame, area, params.exercise, params.scroll_offset),
+    ExercisePage::Theory => render_theory(frame, area, params.exercise, params.scroll_offset, code_opts, cache),
+    ExercisePage::Task => render_task(frame, area, params.exercise, params.scroll_offset, code_opts, cache),
     ExercisePage::Output => {
       render_output(
         frame,
@@ -143,7 +151,7 @@ fn render_content(frame: &mut Frame, area: Rect, params: &ViewParams<'_>) -> Opt
       );
       None
     }
-    ExercisePage::Solution => render_solution(frame, area, params.exercise, &params.config_state, params.scroll_offset),
+    ExercisePage::Solution => render_solution_page(frame, area, params.exercise, &params.config_state, params.scroll_offset, code_opts, cache),
   }
 }
 
@@ -151,7 +159,7 @@ fn render_content(frame: &mut Frame, area: Rect, params: &ViewParams<'_>) -> Opt
 // Page 1: Theory
 // ---------------------------------------------------------------------------
 
-fn render_theory(frame: &mut Frame, area: Rect, exercise: &Exercise, scroll_offset: usize) -> Option<PendingOsc8> {
+fn render_theory(frame: &mut Frame, area: Rect, exercise: &Exercise, scroll_offset: usize, code_opts: CodeBlockOptions, cache: &mut RenderCache) -> Option<PendingOsc8> {
   let content = match exercise.theory_path {
     Some(ref path) => match fs::read_to_string(path) {
       Ok(text) => text,
@@ -160,7 +168,15 @@ fn render_theory(frame: &mut Frame, area: Rect, exercise: &Exercise, scroll_offs
     None => "No theory available.".to_string(),
   };
 
-  let (lines, links) = parse_markdown_with_links(&content, area.width);
+  // Try to get from cache first
+  let cache_key = RenderCache::make_key(&exercise.relative_path, ContentType::Theory, area.width, code_opts);
+  let (lines, links) = if let Some(cached) = cache.get(&cache_key, &content) {
+    (cached.lines.clone(), cached.links.clone())
+  } else {
+    let (lines, links) = parse_markdown_with_links_opts(&content, area.width, code_opts);
+    cache.insert(cache_key, CachedContent::new(lines.clone(), links.clone(), &content));
+    (lines, links)
+  };
   let title = scroll_title("Theory", scroll_offset, lines.len(), area.height);
 
   let block = Block::default().borders(Borders::TOP).title(title);
@@ -179,7 +195,7 @@ fn render_theory(frame: &mut Frame, area: Rect, exercise: &Exercise, scroll_offs
 // Page 2: Task
 // ---------------------------------------------------------------------------
 
-fn render_task(frame: &mut Frame, area: Rect, exercise: &Exercise, scroll_offset: usize) -> Option<PendingOsc8> {
+fn render_task(frame: &mut Frame, area: Rect, exercise: &Exercise, scroll_offset: usize, code_opts: CodeBlockOptions, cache: &mut RenderCache) -> Option<PendingOsc8> {
   let content = match fs::read_to_string(&exercise.task_path) {
     Ok(text) => {
       let stripped = strip_frontmatter(&text);
@@ -188,7 +204,15 @@ fn render_task(frame: &mut Frame, area: Rect, exercise: &Exercise, scroll_offset
     Err(e) => format!("Error reading task file: {e}"),
   };
 
-  let (lines, links) = parse_markdown_with_links(&content, area.width);
+  // Try to get from cache first
+  let cache_key = RenderCache::make_key(&exercise.relative_path, ContentType::Task, area.width, code_opts);
+  let (lines, links) = if let Some(cached) = cache.get(&cache_key, &content) {
+    (cached.lines.clone(), cached.links.clone())
+  } else {
+    let (lines, links) = parse_markdown_with_links_opts(&content, area.width, code_opts);
+    cache.insert(cache_key, CachedContent::new(lines.clone(), links.clone(), &content));
+    (lines, links)
+  };
   let title = scroll_title("Task", scroll_offset, lines.len(), area.height);
 
   let block = Block::default().borders(Borders::TOP).title(title);
@@ -305,7 +329,7 @@ fn build_output_lines<'a>(exercise: &'a Exercise, hints_revealed: usize, solutio
 // Page 4: Solution
 // ---------------------------------------------------------------------------
 
-fn render_solution(frame: &mut Frame, area: Rect, exercise: &Exercise, config_state: &ExerciseState, scroll_offset: usize) -> Option<PendingOsc8> {
+fn render_solution_page(frame: &mut Frame, area: Rect, exercise: &Exercise, config_state: &ExerciseState, scroll_offset: usize, code_opts: CodeBlockOptions, cache: &mut RenderCache) -> Option<PendingOsc8> {
   let solution_accessible = config_state.passed || config_state.solution_seen;
 
   if !solution_accessible {
@@ -316,10 +340,37 @@ fn render_solution(frame: &mut Frame, area: Rect, exercise: &Exercise, config_st
     return None;
   }
 
-  let mut lines: Vec<Line<'static>> = Vec::new();
+  // Build content string for cache key hashing
+  let mut content_for_hash = String::new();
+  if let Some(ref solution_path) = exercise.solution_source {
+    if let Ok(source) = fs::read_to_string(solution_path) {
+      content_for_hash.push_str(&source);
+    }
+  }
+  if let Some(ref sd) = exercise.solution_data {
+    content_for_hash.push_str(&sd.explanation);
+  }
+
+  // Try cache first
+  let cache_key = RenderCache::make_key(&exercise.relative_path, ContentType::Solution, area.width, code_opts);
+  if let Some(cached) = cache.get(&cache_key, &content_for_hash) {
+    let title = scroll_title("Solution", scroll_offset, cached.lines.len(), area.height);
+    let block = Block::default().borders(Borders::TOP).title(title);
+    let inner = block.inner(area);
+    let paragraph = Paragraph::new(cached.lines.clone()).block(block).scroll((scroll_offset as u16, 0)).wrap(Wrap { trim: false });
+    frame.render_widget(paragraph, area);
+    return Some(PendingOsc8 {
+      area: inner,
+      scroll: scroll_offset,
+      links: cached.links.clone(),
+    });
+  }
+
+  // Cache miss - build content
+  let mut lines: Vec<Line<'_>> = Vec::new();
   let mut solution_links: Vec<LinkSpan> = Vec::new();
 
-  // Reference source code
+  // Source code from solution file
   if let Some(ref solution_path) = exercise.solution_source {
     match fs::read_to_string(solution_path) {
       Ok(source) => {
@@ -331,7 +382,7 @@ fn render_solution(frame: &mut Frame, area: Rect, exercise: &Exercise, config_st
         )));
         lines.push(Line::from(""));
         let token = exercise.language.syntax_token();
-        lines.extend(crate::ui::markdown::highlight_code_block(&source, token, area.width));
+        lines.extend(crate::ui::markdown::highlight_code_block(&source, token, area.width, code_opts));
       }
       Err(e) => {
         lines.push(Line::from(format!("Error reading solution source: {e}")));
@@ -343,12 +394,15 @@ fn render_solution(frame: &mut Frame, area: Rect, exercise: &Exercise, config_st
   if let Some(ref sd) = exercise.solution_data
     && !sd.explanation.is_empty()
   {
-    solution_links = append_explanation(&mut lines, sd, area.width);
+    solution_links = append_explanation(&mut lines, sd, area.width, code_opts);
   }
 
   if lines.is_empty() {
     lines.push(Line::from("No solution content available."));
   }
+
+  // Store in cache
+  cache.insert(cache_key, CachedContent::new(lines.clone(), solution_links.clone(), &content_for_hash));
 
   let title = scroll_title("Solution", scroll_offset, lines.len(), area.height);
 
@@ -365,7 +419,7 @@ fn render_solution(frame: &mut Frame, area: Rect, exercise: &Exercise, config_st
 }
 
 /// Append the explanation section from `SolutionData` into `lines`.
-fn append_explanation(lines: &mut Vec<Line<'static>>, solution_data: &crate::exercise::SolutionData, width: u16) -> Vec<LinkSpan> {
+fn append_explanation(lines: &mut Vec<Line<'static>>, solution_data: &crate::exercise::SolutionData, width: u16, code_opts: CodeBlockOptions) -> Vec<LinkSpan> {
   if !lines.is_empty() {
     lines.push(Line::from(""));
     // Use term_caps for cross-platform separator characters
@@ -383,7 +437,7 @@ fn append_explanation(lines: &mut Vec<Line<'static>>, solution_data: &crate::exe
   lines.push(Line::from(""));
   // Record where markdown content begins so link line indices can be offset.
   let md_line_offset = lines.len();
-  let (md_lines, mut links) = parse_markdown_with_links(&solution_data.explanation, width);
+  let (md_lines, mut links) = parse_markdown_with_links_opts(&solution_data.explanation, width, code_opts);
   lines.extend(md_lines);
   // Shift each link's line_idx to account for the header lines above.
   for link in &mut links {

@@ -14,6 +14,9 @@ solution_seen = true
 best_score = 1.0
 passed = true
 solution_seen = false
+[display]
+line_numbers = false
+syntax_highlighting = false
 
 [rust]
 cmd = "rustc --edition 2024 --test <file> -o <out>"

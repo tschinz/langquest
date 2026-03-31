@@ -1,6 +1,7 @@
 //! TUI rendering modules.
 
 pub mod about;
+pub mod cache;
 pub mod exercise_view;
 pub mod markdown;
 pub mod overview;

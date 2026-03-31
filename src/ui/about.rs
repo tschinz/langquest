@@ -9,10 +9,17 @@
 //! centred horizontally in the available area.  When the content fits in the
 //! viewport it is also centred vertically.
 
+use std::sync::Mutex;
+
 use ratatui::prelude::*;
+use ratatui::text::Line;
 use ratatui::widgets::{Paragraph, Wrap};
 
-use crate::ui::markdown::{PendingOsc8, parse_markdown_with_links};
+use crate::ui::markdown::{LinkSpan, PendingOsc8, parse_markdown_with_links};
+
+/// Cached parsed content for the About page.
+/// Since content is static, we only need to cache by width.
+static ABOUT_CACHE: Mutex<Option<(u16, Vec<Line<'static>>, Vec<LinkSpan>)>> = Mutex::new(None);
 
 /// Markdown source embedded at compile time.
 const ABOUT_MD: &str = include_str!("about.md");
@@ -35,8 +42,25 @@ pub fn render(frame: &mut Frame, area: Rect, scroll: usize) -> PendingOsc8 {
   // Cap at MAX_CONTENT_WIDTH; never exceed the available area.
   let content_width = area.width.min(MAX_CONTENT_WIDTH);
 
-  // ── Parse at the clamped width ────────────────────────────────────────
-  let (lines, links) = parse_markdown_with_links(ABOUT_MD, content_width);
+  // ── Get cached or parse ───────────────────────────────────────────────
+  let (lines, links) = {
+    let mut cache = ABOUT_CACHE.lock().unwrap();
+    if let Some((cached_width, ref lines, ref links)) = *cache {
+      if cached_width == content_width {
+        (lines.clone(), links.clone())
+      } else {
+        // Width changed, re-parse
+        let (lines, links) = parse_markdown_with_links(ABOUT_MD, content_width);
+        *cache = Some((content_width, lines.clone(), links.clone()));
+        (lines, links)
+      }
+    } else {
+      // First render, parse and cache
+      let (lines, links) = parse_markdown_with_links(ABOUT_MD, content_width);
+      *cache = Some((content_width, lines.clone(), links.clone()));
+      (lines, links)
+    }
+  };
 
   // ── Visual height ─────────────────────────────────────────────────────
   // Account for lines that wrap when computing the total number of terminal

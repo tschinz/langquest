@@ -3,6 +3,8 @@
 //! The main entry-point is [`parse_markdown`], which converts a Markdown
 //! string into a `Vec<Line<'static>>` that can be fed directly to a ratatui
 //! [`Paragraph`](ratatui::widgets::Paragraph).
+//!
+//! Code block rendering can be customised via [`CodeBlockOptions`].
 
 use std::io;
 use std::sync::LazyLock;
@@ -16,6 +18,26 @@ use syntect::parsing::SyntaxSet;
 use syntect::util::LinesWithEndings;
 
 use super::term_caps::{chars, colors, supports_osc8};
+
+// ── Code block options ────────────────────────────────────────────────────────
+
+/// Options for rendering code blocks in markdown.
+#[derive(Debug, Clone, Copy)]
+pub struct CodeBlockOptions {
+  /// Whether to show line numbers in the gutter.
+  pub line_numbers: bool,
+  /// Whether to apply syntax highlighting.
+  pub syntax_highlighting: bool,
+}
+
+impl Default for CodeBlockOptions {
+  fn default() -> Self {
+    Self {
+      line_numbers: true,
+      syntax_highlighting: true,
+    }
+  }
+}
 
 // ── Syntax highlighting ───────────────────────────────────────────────────────
 
@@ -39,10 +61,17 @@ fn code_bg() -> Color {
 ///
 /// `lang` is the language token from the opening fence (e.g. `"rust"`,
 /// `"python"`, `""`). Unknown languages fall back to the plain-text grammar.
-pub(crate) fn highlight_code_block(code: &str, lang: &str, width: u16) -> Vec<Line<'static>> {
+///
+/// Use `opts` to control line numbers and syntax highlighting.
+pub(crate) fn highlight_code_block(code: &str, lang: &str, width: u16, opts: CodeBlockOptions) -> Vec<Line<'static>> {
+  // If syntax highlighting is disabled, use plain rendering (no background)
+  if !opts.syntax_highlighting {
+    return plain_code_lines(code, width, opts.line_numbers, None);
+  }
+
   let ps = &*SYNTAX_SET;
   let ts = &*THEME_SET;
-  let bg = code_bg();
+  let bg = Some(code_bg());
 
   let syntax = if lang.is_empty() {
     ps.find_syntax_plain_text()
@@ -52,7 +81,7 @@ pub(crate) fn highlight_code_block(code: &str, lang: &str, width: u16) -> Vec<Li
 
   let theme = match ts.themes.get(CODE_THEME) {
     Some(t) => t,
-    None => return plain_code_lines(code, width),
+    None => return plain_code_lines(code, width, opts.line_numbers, bg),
   };
 
   // Collect source lines up-front so we know the total count for number width.
@@ -77,7 +106,10 @@ pub(crate) fn highlight_code_block(code: &str, lang: &str, width: u16) -> Vec<Li
           .filter(|(_, text)| !text.is_empty())
           .map(|(style, text)| {
             let fg = colors::rgb(style.foreground.r, style.foreground.g, style.foreground.b);
-            let mut s = Style::default().fg(fg).bg(bg);
+            let mut s = Style::default().fg(fg);
+            if let Some(bg_color) = bg {
+              s = s.bg(bg_color);
+            }
             if style.font_style.contains(FontStyle::BOLD) {
               s = s.add_modifier(Modifier::BOLD);
             }
@@ -90,18 +122,23 @@ pub(crate) fn highlight_code_block(code: &str, lang: &str, width: u16) -> Vec<Li
             Span::styled(text.trim_end_matches('\n').to_string(), s)
           })
           .collect();
-        content.push(code_line(spans, i + 1, num_width, width, bg));
+        content.push(code_line(spans, i + 1, num_width, width, bg, opts.line_numbers));
       }
       Err(_) => {
+        let mut style = Style::default().fg(Color::Yellow);
+        if let Some(bg_color) = bg {
+          style = style.bg(bg_color);
+        }
         content.push(code_line(
           vec![Span::styled(
             source_line.trim_end_matches('\n').to_string(),
-            Style::default().fg(Color::Yellow).bg(bg),
+            style,
           )],
           i + 1,
           num_width,
           width,
           bg,
+          opts.line_numbers,
         ));
       }
     }
@@ -109,62 +146,90 @@ pub(crate) fn highlight_code_block(code: &str, lang: &str, width: u16) -> Vec<Li
   content
 }
 
-/// Fallback: plain yellow lines when syntect is unavailable.
-fn plain_code_lines(code: &str, width: u16) -> Vec<Line<'static>> {
+/// Fallback: plain yellow lines when syntect is unavailable or highlighting disabled.
+fn plain_code_lines(code: &str, width: u16, show_line_numbers: bool, bg: Option<Color>) -> Vec<Line<'static>> {
   let src: Vec<&str> = code.lines().collect();
   if src.is_empty() {
     return Vec::new();
   }
-  let bg = code_bg();
   let num_width = src.len().to_string().len().max(1);
   let mut lines = Vec::with_capacity(src.len());
   for (i, l) in src.iter().enumerate() {
+    let mut style = Style::default().fg(Color::Yellow);
+    if let Some(bg_color) = bg {
+      style = style.bg(bg_color);
+    }
     lines.push(code_line(
-      vec![Span::styled(l.to_string(), Style::default().fg(Color::Yellow).bg(bg))],
+      vec![Span::styled(l.to_string(), style)],
       i + 1,
       num_width,
       width,
       bg,
+      show_line_numbers,
     ));
   }
   lines
 }
 
-/// Build a single code-block line with a line number gutter.
+/// Build a single code-block line with optional line number gutter.
 ///
-/// Layout (all on `CODE_BG`):
+/// Layout (optionally on background color):
 /// ```text
-///  <1 char pad> <line_num right-aligned> <gutter sep> <code spans> <trailing pad>
+///  <1 char pad> [<line_num right-aligned> <gutter sep>] <code spans> <trailing pad>
 /// ```
 /// The trailing pad span explicitly fills the row to `width` so the background
 /// covers the full terminal width regardless of ratatui's line-style behaviour.
-fn code_line(spans: Vec<Span<'static>>, line_num: usize, num_width: usize, width: u16, bg: Color) -> Line<'static> {
-  // Get the gutter separator (Unicode or ASCII depending on terminal)
-  let gutter_sep = chars::gutter_sep();
-  // Fixed prefix length: 1 (left pad) + num_width (number) + gutter_sep length
-  let prefix_len = 1 + num_width + gutter_sep.chars().count();
+/// When `bg` is `None`, no background is applied (for plain/disabled highlighting).
+fn code_line(spans: Vec<Span<'static>>, line_num: usize, num_width: usize, width: u16, bg: Option<Color>, show_line_numbers: bool) -> Line<'static> {
   let code_chars: usize = spans.iter().map(|s| s.content.chars().count()).sum();
-  let used = prefix_len + code_chars;
-  let trailing = (width as usize).saturating_sub(used);
 
   let mut all = Vec::with_capacity(spans.len() + 4);
-  // 1-char left padding.
-  all.push(Span::styled(" ", Style::default().bg(bg)));
-  // Line number, right-aligned and muted.
-  all.push(Span::styled(
-    format!("{:>num_width$}", line_num),
-    Style::default().fg(colors::code_gutter_fg()).bg(bg),
-  ));
-  // Gutter separator (uses term_caps for cross-platform char).
-  all.push(Span::styled(gutter_sep.to_string(), Style::default().fg(colors::code_gutter_sep_fg()).bg(bg)));
+
+  // Helper to apply optional background
+  let with_bg = |style: Style| -> Style {
+    match bg {
+      Some(bg_color) => style.bg(bg_color),
+      None => style,
+    }
+  };
+
+  let prefix_len = if show_line_numbers {
+    // Get the gutter separator (Unicode or ASCII depending on terminal)
+    let gutter_sep = chars::gutter_sep();
+    // Fixed prefix length: 1 (left pad) + num_width (number) + gutter_sep length
+    let prefix_len = 1 + num_width + gutter_sep.chars().count();
+
+    // 1-char left padding.
+    all.push(Span::styled(" ", with_bg(Style::default())));
+    // Line number, right-aligned and muted.
+    all.push(Span::styled(
+      format!("{:>num_width$}", line_num),
+      with_bg(Style::default().fg(colors::code_gutter_fg())),
+    ));
+    // Gutter separator (uses term_caps for cross-platform char).
+    all.push(Span::styled(gutter_sep.to_string(), with_bg(Style::default().fg(colors::code_gutter_sep_fg()))));
+
+    prefix_len
+  } else {
+    // Just 1-char left padding when line numbers are disabled
+    all.push(Span::styled(" ", with_bg(Style::default())));
+    1
+  };
+
   // Code content.
   all.extend(spans);
-  // Trailing spaces to fill the rest of the row.
-  if trailing > 0 {
-    all.push(Span::styled(" ".repeat(trailing), Style::default().bg(bg)));
+
+  // Trailing spaces to fill the rest of the row (only when background is enabled).
+  let used = prefix_len + code_chars;
+  let trailing = (width as usize).saturating_sub(used);
+  if trailing > 0 && bg.is_some() {
+    all.push(Span::styled(" ".repeat(trailing), with_bg(Style::default())));
   }
+
   let mut line = Line::from(all);
-  line.style = Style::default().bg(bg);
+  if let Some(bg_color) = bg {
+    line.style = Style::default().bg(bg_color);
+  }
   line
 }
 
@@ -326,9 +391,14 @@ fn ratatui_to_crossterm_color(c: Color) -> crossterm::style::Color {
 /// document together with its rendered position, so that callers can apply
 /// OSC 8 terminal hyperlink escape sequences to the ratatui buffer.
 pub fn parse_markdown_with_links(input: &str, width: u16) -> (Vec<Line<'static>>, Vec<LinkSpan>) {
+  parse_markdown_with_links_opts(input, width, CodeBlockOptions::default())
+}
+
+/// Like [`parse_markdown_with_links`] but with configurable code block options.
+pub fn parse_markdown_with_links_opts(input: &str, width: u16, code_opts: CodeBlockOptions) -> (Vec<Line<'static>>, Vec<LinkSpan>) {
   let options = Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS | Options::ENABLE_TABLES;
   let parser = Parser::new_ext(input, options);
-  let mut renderer = Renderer { width, ..Default::default() };
+  let mut renderer = Renderer { width, code_opts, ..Default::default() };
   for event in parser {
     renderer.process(event);
   }
@@ -380,6 +450,8 @@ struct Renderer {
   links: Vec<LinkSpan>,
   /// Available render width passed through to code-block helpers.
   width: u16,
+  /// Code block rendering options.
+  code_opts: CodeBlockOptions,
 }
 
 impl Renderer {
@@ -645,7 +717,7 @@ impl Renderer {
         // Render the accumulated text in one shot so that multiple
         // Text events (e.g. inside list items) produce a single block
         // with a shared line-number gutter.
-        self.lines.extend(highlight_code_block(&self.code_text, &self.code_lang, self.width));
+        self.lines.extend(highlight_code_block(&self.code_text, &self.code_lang, self.width, self.code_opts));
         self.code_text.clear();
         self.in_code_block = false;
         self.code_lang.clear();
@@ -851,6 +923,11 @@ mod code_block_layout_tests {
   fn has_code_bg(l: &Line<'_>) -> bool {
     let bg = code_bg();
     l.style.bg == Some(bg) || l.spans.iter().any(|s| s.style.bg == Some(bg))
+  }
+
+  /// Default code options for tests.
+  fn test_opts() -> CodeBlockOptions {
+    CodeBlockOptions::default()
   }
 
   /// Find all (index, has_code_bg) pairs for a rendered markdown string.
