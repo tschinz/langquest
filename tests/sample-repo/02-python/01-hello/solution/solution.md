@@ -17,7 +17,6 @@ Python functions are defined with `def` and use `return` to send values back.
 def greeting():
     return "Hello, World!"  # Return the exact string
 
-
 # Tests verify the function works correctly
 import unittest
 
@@ -25,7 +24,6 @@ class TestGreeting(unittest.TestCase):
     def test_returns_hello_world(self):
         # assertEqual checks if two values match
         self.assertEqual(greeting(), "Hello, World!")
-
 
 if __name__ == "__main__":
     unittest.main()

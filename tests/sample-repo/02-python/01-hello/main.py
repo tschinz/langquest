@@ -2,7 +2,6 @@
 def greeting():
     return ""
 
-
 import unittest
 
 class TestGreeting(unittest.TestCase):
