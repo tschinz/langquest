@@ -37,7 +37,8 @@ const MAX_CONTENT_WIDTH: u16 = 72;
 ///
 /// `scroll` mirrors `App::scroll_offset` so the content can be paged when
 /// the terminal is very short.
-pub fn render(frame: &mut Frame, area: Rect, scroll: usize) -> PendingOsc8 {
+/// Returns (pending_osc8, content_height, viewport_height) for scroll limiting.
+pub fn render(frame: &mut Frame, area: Rect, scroll: usize) -> (PendingOsc8, usize, usize) {
   // ── Content width ─────────────────────────────────────────────────────
   // Cap at MAX_CONTENT_WIDTH; never exceed the available area.
   let content_width = area.width.min(MAX_CONTENT_WIDTH);
@@ -94,13 +95,16 @@ pub fn render(frame: &mut Frame, area: Rect, scroll: usize) -> PendingOsc8 {
     height: area.height.saturating_sub(v_margin),
   };
 
+  let content_height = lines.len();
+  let viewport_height = content_area.height as usize;
+
   let para = Paragraph::new(lines).scroll((scroll as u16, 0)).wrap(Wrap { trim: false });
 
   frame.render_widget(para, content_area);
 
-  PendingOsc8 {
+  (PendingOsc8 {
     area: content_area,
     scroll,
     links,
-  }
+  }, content_height, viewport_height)
 }

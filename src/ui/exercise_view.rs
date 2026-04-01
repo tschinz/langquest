@@ -95,7 +95,13 @@ pub fn render(app: &mut App, frame: &mut Frame, area: Rect) -> Option<PendingOsc
     display,
   };
 
-  render_exercise(frame, area, &params, &mut app.render_cache)
+  let (pending, content_height, viewport_height) = render_exercise(frame, area, &params, &mut app.render_cache);
+  
+  // Update app with content dimensions for scroll limiting
+  app.content_height = content_height;
+  app.viewport_height = viewport_height;
+  
+  pending
 }
 
 // ---------------------------------------------------------------------------
@@ -103,7 +109,8 @@ pub fn render(app: &mut App, frame: &mut Frame, area: Rect) -> Option<PendingOsc
 // ---------------------------------------------------------------------------
 
 /// Render the exercise view with bundled parameters.
-fn render_exercise(frame: &mut Frame, area: Rect, params: &ViewParams<'_>, cache: &mut RenderCache) -> Option<PendingOsc8> {
+/// Returns (pending_osc8, content_height, viewport_height) for scroll limiting.
+fn render_exercise(frame: &mut Frame, area: Rect, params: &ViewParams<'_>, cache: &mut RenderCache) -> (Option<PendingOsc8>, usize, usize) {
   let rows = Layout::default()
     .direction(Direction::Vertical)
     .constraints([Constraint::Length(1), Constraint::Min(1)])
@@ -131,16 +138,26 @@ fn render_topbar(frame: &mut Frame, area: Rect, exercise: &Exercise) {
 // Content dispatcher
 // ---------------------------------------------------------------------------
 
-fn render_content(frame: &mut Frame, area: Rect, params: &ViewParams<'_>, cache: &mut RenderCache) -> Option<PendingOsc8> {
+/// Returns (pending_osc8, content_height, viewport_height) for scroll limiting.
+fn render_content(frame: &mut Frame, area: Rect, params: &ViewParams<'_>, cache: &mut RenderCache) -> (Option<PendingOsc8>, usize, usize) {
   let code_opts = CodeBlockOptions {
     line_numbers: params.display.line_numbers,
     syntax_highlighting: params.display.syntax_highlighting,
   };
+  // Viewport height is the area height minus the border (1 line for top border)
+  let viewport_height = area.height.saturating_sub(1) as usize;
+  
   match params.page {
-    ExercisePage::Theory => render_theory(frame, area, params.exercise, params.scroll_offset, code_opts, cache),
-    ExercisePage::Task => render_task(frame, area, params.exercise, params.scroll_offset, code_opts, cache),
+    ExercisePage::Theory => {
+      let (pending, content_height) = render_theory(frame, area, params.exercise, params.scroll_offset, code_opts, cache);
+      (pending, content_height, viewport_height)
+    }
+    ExercisePage::Task => {
+      let (pending, content_height) = render_task(frame, area, params.exercise, params.scroll_offset, code_opts, cache);
+      (pending, content_height, viewport_height)
+    }
     ExercisePage::Output => {
-      render_output(
+      let content_height = render_output(
         frame,
         area,
         params.exercise,
@@ -149,9 +166,12 @@ fn render_content(frame: &mut Frame, area: Rect, params: &ViewParams<'_>, cache:
         params.last_result,
         params.scroll_offset,
       );
-      None
+      (None, content_height, viewport_height)
     }
-    ExercisePage::Solution => render_solution_page(frame, area, params.exercise, &params.config_state, params.scroll_offset, code_opts, cache),
+    ExercisePage::Solution => {
+      let (pending, content_height) = render_solution_page(frame, area, params.exercise, &params.config_state, params.scroll_offset, code_opts, cache);
+      (pending, content_height, viewport_height)
+    }
   }
 }
 
@@ -159,7 +179,8 @@ fn render_content(frame: &mut Frame, area: Rect, params: &ViewParams<'_>, cache:
 // Page 1: Theory
 // ---------------------------------------------------------------------------
 
-fn render_theory(frame: &mut Frame, area: Rect, exercise: &Exercise, scroll_offset: usize, code_opts: CodeBlockOptions, cache: &mut RenderCache) -> Option<PendingOsc8> {
+/// Returns (pending_osc8, content_line_count) for scroll limiting.
+fn render_theory(frame: &mut Frame, area: Rect, exercise: &Exercise, scroll_offset: usize, code_opts: CodeBlockOptions, cache: &mut RenderCache) -> (Option<PendingOsc8>, usize) {
   let content = match exercise.theory_path {
     Some(ref path) => match fs::read_to_string(path) {
       Ok(text) => text,
@@ -177,25 +198,27 @@ fn render_theory(frame: &mut Frame, area: Rect, exercise: &Exercise, scroll_offs
     cache.insert(cache_key, CachedContent::new(lines.clone(), links.clone(), &content));
     (lines, links)
   };
-  let title = scroll_title("Theory", scroll_offset, lines.len(), area.height);
+  let content_height = lines.len();
+  let title = scroll_title("Theory", scroll_offset, content_height, area.height);
 
   let block = Block::default().borders(Borders::TOP).title(title);
   let inner = block.inner(area);
   let paragraph = Paragraph::new(lines).block(block).scroll((scroll_offset as u16, 0)).wrap(Wrap { trim: false });
 
   frame.render_widget(paragraph, area);
-  Some(PendingOsc8 {
+  (Some(PendingOsc8 {
     area: inner,
     scroll: scroll_offset,
     links,
-  })
+  }), content_height)
 }
 
 // ---------------------------------------------------------------------------
 // Page 2: Task
 // ---------------------------------------------------------------------------
 
-fn render_task(frame: &mut Frame, area: Rect, exercise: &Exercise, scroll_offset: usize, code_opts: CodeBlockOptions, cache: &mut RenderCache) -> Option<PendingOsc8> {
+/// Returns (pending_osc8, content_line_count) for scroll limiting.
+fn render_task(frame: &mut Frame, area: Rect, exercise: &Exercise, scroll_offset: usize, code_opts: CodeBlockOptions, cache: &mut RenderCache) -> (Option<PendingOsc8>, usize) {
   let content = match fs::read_to_string(&exercise.task_path) {
     Ok(text) => {
       let stripped = strip_frontmatter(&text);
@@ -213,24 +236,26 @@ fn render_task(frame: &mut Frame, area: Rect, exercise: &Exercise, scroll_offset
     cache.insert(cache_key, CachedContent::new(lines.clone(), links.clone(), &content));
     (lines, links)
   };
-  let title = scroll_title("Task", scroll_offset, lines.len(), area.height);
+  let content_height = lines.len();
+  let title = scroll_title("Task", scroll_offset, content_height, area.height);
 
   let block = Block::default().borders(Borders::TOP).title(title);
   let inner = block.inner(area);
   let paragraph = Paragraph::new(lines).block(block).scroll((scroll_offset as u16, 0)).wrap(Wrap { trim: false });
 
   frame.render_widget(paragraph, area);
-  Some(PendingOsc8 {
+  (Some(PendingOsc8 {
     area: inner,
     scroll: scroll_offset,
     links,
-  })
+  }), content_height)
 }
 
 // ---------------------------------------------------------------------------
 // Page 3: Output
 // ---------------------------------------------------------------------------
 
+/// Returns content_line_count for scroll limiting.
 fn render_output(
   frame: &mut Frame,
   area: Rect,
@@ -239,13 +264,14 @@ fn render_output(
   solution_unlock_pending: bool,
   last_result: Option<&VerificationResult>,
   scroll_offset: usize,
-) {
+) -> usize {
   let lines = match last_result {
     Some(result) => build_output_lines(exercise, hints_revealed, solution_unlock_pending, result),
     None => vec![Line::from("No verification result yet. Save your file to trigger verification.")],
   };
 
-  let title = scroll_title("Output", scroll_offset, lines.len(), area.height);
+  let content_height = lines.len();
+  let title = scroll_title("Output", scroll_offset, content_height, area.height);
 
   let paragraph = Paragraph::new(lines)
     .block(Block::default().borders(Borders::TOP).title(title))
@@ -253,6 +279,7 @@ fn render_output(
     .wrap(Wrap { trim: false });
 
   frame.render_widget(paragraph, area);
+  content_height
 }
 
 fn build_output_lines<'a>(exercise: &'a Exercise, hints_revealed: usize, solution_unlock_pending: bool, result: &'a VerificationResult) -> Vec<Line<'a>> {
@@ -329,7 +356,8 @@ fn build_output_lines<'a>(exercise: &'a Exercise, hints_revealed: usize, solutio
 // Page 4: Solution
 // ---------------------------------------------------------------------------
 
-fn render_solution_page(frame: &mut Frame, area: Rect, exercise: &Exercise, config_state: &ExerciseState, scroll_offset: usize, code_opts: CodeBlockOptions, cache: &mut RenderCache) -> Option<PendingOsc8> {
+/// Returns (pending_osc8, content_line_count) for scroll limiting.
+fn render_solution_page(frame: &mut Frame, area: Rect, exercise: &Exercise, config_state: &ExerciseState, scroll_offset: usize, code_opts: CodeBlockOptions, cache: &mut RenderCache) -> (Option<PendingOsc8>, usize) {
   let solution_accessible = config_state.passed || config_state.solution_seen;
 
   if !solution_accessible {
@@ -337,7 +365,7 @@ fn render_solution_page(frame: &mut Frame, area: Rect, exercise: &Exercise, conf
       .block(Block::default().borders(Borders::TOP).title("Solution"))
       .wrap(Wrap { trim: false });
     frame.render_widget(paragraph, area);
-    return None;
+    return (None, 1);
   }
 
   // Build content string for cache key hashing
@@ -354,16 +382,17 @@ fn render_solution_page(frame: &mut Frame, area: Rect, exercise: &Exercise, conf
   // Try cache first
   let cache_key = RenderCache::make_key(&exercise.relative_path, ContentType::Solution, area.width, code_opts);
   if let Some(cached) = cache.get(&cache_key, &content_for_hash) {
-    let title = scroll_title("Solution", scroll_offset, cached.lines.len(), area.height);
+    let content_height = cached.lines.len();
+    let title = scroll_title("Solution", scroll_offset, content_height, area.height);
     let block = Block::default().borders(Borders::TOP).title(title);
     let inner = block.inner(area);
     let paragraph = Paragraph::new(cached.lines.clone()).block(block).scroll((scroll_offset as u16, 0)).wrap(Wrap { trim: false });
     frame.render_widget(paragraph, area);
-    return Some(PendingOsc8 {
+    return (Some(PendingOsc8 {
       area: inner,
       scroll: scroll_offset,
       links: cached.links.clone(),
-    });
+    }), content_height);
   }
 
   // Cache miss - build content
@@ -402,20 +431,22 @@ fn render_solution_page(frame: &mut Frame, area: Rect, exercise: &Exercise, conf
   }
 
   // Store in cache
+  let content_height = lines.len();
   cache.insert(cache_key, CachedContent::new(lines.clone(), solution_links.clone(), &content_for_hash));
 
-  let title = scroll_title("Solution", scroll_offset, lines.len(), area.height);
+  let title = scroll_title("Solution", scroll_offset, content_height, area.height);
 
   let block = Block::default().borders(Borders::TOP).title(title);
   let inner = block.inner(area);
   let paragraph = Paragraph::new(lines).block(block).scroll((scroll_offset as u16, 0)).wrap(Wrap { trim: false });
 
   frame.render_widget(paragraph, area);
-  Some(PendingOsc8 {
+
+  (Some(PendingOsc8 {
     area: inner,
     scroll: scroll_offset,
     links: solution_links,
-  })
+  }), content_height)
 }
 
 /// Append the explanation section from `SolutionData` into `lines`.

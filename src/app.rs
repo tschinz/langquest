@@ -97,6 +97,10 @@ pub struct App {
   pub show_menu: bool,
   /// Vertical scroll offset for markdown/text content.
   pub scroll_offset: usize,
+  /// Last known content height (in lines) for scroll limiting.
+  pub content_height: usize,
+  /// Last known viewport height (in lines) for scroll limiting.
+  pub viewport_height: usize,
   /// File watcher for the current exercise's source file.
   pub watcher: Option<ExerciseWatcher>,
   /// Whether the "unlock solution?" warning is awaiting a second `h` press.
@@ -159,6 +163,8 @@ impl App {
       show_tree: true,
       show_menu: true,
       scroll_offset: 0,
+      content_height: 0,
+      viewport_height: 0,
       watcher: None,
       solution_unlock_pending: false,
       render_cache: RenderCache::new(),
@@ -630,7 +636,11 @@ impl App {
         self.overview_cursor += 1;
       }
     } else {
-      self.scroll_offset = self.scroll_offset.saturating_add(1);
+      // Limit scroll so last line can reach top of viewport
+      let max_scroll = self.content_height.saturating_sub(1);
+      if self.scroll_offset < max_scroll {
+        self.scroll_offset = self.scroll_offset.saturating_add(1);
+      }
     }
   }
 
@@ -649,7 +659,9 @@ impl App {
       let max = self.exercises.len().saturating_sub(1);
       self.overview_cursor = (self.overview_cursor + 10).min(max);
     } else {
-      self.scroll_offset = self.scroll_offset.saturating_add(10);
+      // Limit scroll so last line can reach top of viewport
+      let max_scroll = self.content_height.saturating_sub(1);
+      self.scroll_offset = (self.scroll_offset + 10).min(max_scroll);
     }
   }
 
@@ -745,6 +757,9 @@ impl App {
     let pending = match self.view {
       View::ExerciseView => ui::exercise_view::render(self, frame, content_area),
       View::Overview => {
+        // Overview uses overview_cursor for navigation, not scroll_offset
+        self.content_height = self.exercises.len();
+        self.viewport_height = content_area.height as usize;
         ui::overview::render(
           frame,
           content_area,
@@ -756,7 +771,12 @@ impl App {
         );
         None
       }
-      View::About => Some(ui::about::render(frame, content_area, self.scroll_offset)),
+      View::About => {
+        let (pending, content_height, viewport_height) = ui::about::render(frame, content_area, self.scroll_offset);
+        self.content_height = content_height;
+        self.viewport_height = viewport_height;
+        Some(pending)
+      }
     };
 
     let solution_accessible = {
