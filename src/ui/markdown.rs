@@ -77,14 +77,14 @@ pub(crate) fn highlight_code_block(code: &str, lang: &str) -> Vec<Line<'static>>
             if style.font_style.contains(FontStyle::UNDERLINE) {
               s = s.add_modifier(Modifier::UNDERLINED);
             }
-            Span::styled(text.trim_end_matches('\n').to_string(), s)
+            Span::styled(text.trim_end_matches(['\r', '\n']).to_string(), s)
           })
           .collect();
         lines.push(Line::from(spans));
       }
       Err(_) => {
         lines.push(Line::from(Span::styled(
-          source_line.trim_end_matches('\n').to_string(),
+          source_line.trim_end_matches(['\r', '\n']).to_string(),
           Style::default().fg(Color::Yellow),
         )));
       }

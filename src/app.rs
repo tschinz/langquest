@@ -1,6 +1,6 @@
 //! Top-level application state and TUI event loop.
 
-use std::io::Write;
+use std::io::BufWriter;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -271,7 +271,7 @@ impl App {
     crossterm::terminal::enable_raw_mode()?;
     crossterm::execute!(std::io::stderr(), crossterm::terminal::EnterAlternateScreen)?;
 
-    let backend = CrosstermBackend::new(std::io::stderr());
+    let backend = CrosstermBackend::new(BufWriter::new(std::io::stderr()));
     let mut terminal = Terminal::new(backend)?;
 
     let result = self.event_loop(&mut terminal);
@@ -284,7 +284,7 @@ impl App {
   }
 
   /// Inner event loop, separated so cleanup always runs.
-  fn event_loop(&mut self, terminal: &mut Terminal<CrosstermBackend<std::io::Stderr>>) -> Result<()> {
+  fn event_loop(&mut self, terminal: &mut Terminal<CrosstermBackend<BufWriter<std::io::Stderr>>>) -> Result<()> {
     loop {
       // Check for terminal resize
       let size = terminal.size()?;
@@ -305,9 +305,11 @@ impl App {
         // Apply OSC 8 hyperlinks directly to the terminal after the frame
         // is flushed - bypasses ratatui's buffer diff width calculation.
         if let Some(ref p) = pending {
-          let mut stderr = std::io::stderr();
-          p.write_to(completed.buffer, &mut stderr)?;
-          stderr.flush()?;
+          // Use a separate BufWriter for OSC 8 sequences to avoid a double
+          // mutable borrow of `terminal` (completed.buffer also borrows it).
+          let mut w = BufWriter::new(std::io::stderr());
+          p.write_to(completed.buffer, &mut w)?;
+          // BufWriter flushes on drop
         }
       }
 
@@ -319,6 +321,10 @@ impl App {
           changed = true;
         }
         if changed {
+          // Invalidate render cache so the next frame re-reads and re-highlights
+          // the modified source file instead of serving stale cached lines.
+          let exercise_path = self.current_exercise().relative_path.clone();
+          self.render_cache.invalidate_exercise(&exercise_path);
           self.run_verify();
           self.save_config();
           self.needs_redraw = true;
@@ -326,14 +332,28 @@ impl App {
       }
 
       // Poll for crossterm events with a 200ms timeout.
-      if event::poll(Duration::from_millis(200))?
-        && let Event::Key(key) = event::read()?
-        && key.kind == KeyEventKind::Press
-        && self.handle_key(key)
-      {
-        // Quit requested.
-        self.save_config();
-        return Ok(());
+      if event::poll(Duration::from_millis(200))? {
+        if let Event::Key(key) = event::read()?
+          && key.kind == KeyEventKind::Press
+          && self.handle_key(key)
+        {
+          // Quit requested.
+          self.save_config();
+          return Ok(());
+        }
+
+        // Drain any additional events that arrived while we were handling the
+        // first one.  This batches rapid scroll / navigation input so we only
+        // render once at the final position instead of once per keypress.
+        while event::poll(Duration::from_millis(0))? {
+          if let Event::Key(key) = event::read()?
+            && key.kind == KeyEventKind::Press
+            && self.handle_key(key)
+          {
+            self.save_config();
+            return Ok(());
+          }
+        }
       }
     }
   }

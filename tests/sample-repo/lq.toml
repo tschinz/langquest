@@ -1,12 +1,22 @@
-current_exercise = "05-markdown/01-rust-ownership"
+current_exercise = "06-cpp/01-hello-world"
 
 [exercises."01-rust/01-hello-world"]
 best_score = 0.0
 passed = false
-solution_seen = false
+solution_seen = true
+
+[exercises."02-python/01-hello"]
+best_score = 0.0
+passed = false
+solution_seen = true
 
 [exercises."03-riscv/01-hello-riscv"]
 best_score = 0.25
+passed = false
+solution_seen = true
+
+[exercises."04-go/01-hello-world"]
+best_score = 0.0
 passed = false
 solution_seen = true
 
@@ -14,9 +24,11 @@ solution_seen = true
 best_score = 1.0
 passed = true
 solution_seen = false
-[display]
-line_numbers = false
-syntax_highlighting = false
+
+[exercises."06-cpp/01-hello-world"]
+best_score = 0.0
+passed = false
+solution_seen = true
 
 [rust]
 cmd = "rustc --edition 2024 --test <file> -o <out>"

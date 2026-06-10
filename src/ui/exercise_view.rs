@@ -174,19 +174,17 @@ fn render_content(frame: &mut Frame, area: Rect, params: &ViewParams<'_>, cache:
 
 /// Returns (pending_osc8, content_line_count) for scroll limiting.
 fn render_theory(frame: &mut Frame, area: Rect, exercise: &Exercise, scroll_offset: usize, cache: &mut RenderCache) -> (Option<PendingOsc8>, usize) {
-  let content = match exercise.theory_path {
-    Some(ref path) => match fs::read_to_string(path) {
-      Ok(text) => text,
-      Err(e) => format!("Error reading theory file: {e}"),
-    },
-    None => "No theory available.".to_string(),
-  };
-
-  // Try to get from cache first
   let cache_key = RenderCache::make_key(&exercise.relative_path, ContentType::Theory, area.width);
-  let (lines, links) = if let Some(cached) = cache.get(&cache_key, &content) {
+  let (lines, links) = if let Some(cached) = cache.get_cached(&cache_key) {
     (cached.lines.clone(), cached.links.clone())
   } else {
+    let content = match exercise.theory_path {
+      Some(ref path) => match fs::read_to_string(path) {
+        Ok(text) => text.replace("\r\n", "\n"),
+        Err(e) => format!("Error reading theory file: {e}"),
+      },
+      None => "No theory available.".to_string(),
+    };
     let (lines, links) = parse_markdown_with_links(&content, area.width);
     cache.insert(cache_key, CachedContent::new(lines.clone(), links.clone(), &content));
     (lines, links)
@@ -215,19 +213,17 @@ fn render_theory(frame: &mut Frame, area: Rect, exercise: &Exercise, scroll_offs
 
 /// Returns (pending_osc8, content_line_count) for scroll limiting.
 fn render_task(frame: &mut Frame, area: Rect, exercise: &Exercise, scroll_offset: usize, cache: &mut RenderCache) -> (Option<PendingOsc8>, usize) {
-  let content = match fs::read_to_string(&exercise.task_path) {
-    Ok(text) => {
-      let stripped = strip_frontmatter(&text);
-      stripped.to_string()
-    }
-    Err(e) => format!("Error reading task file: {e}"),
-  };
-
-  // Try to get from cache first
   let cache_key = RenderCache::make_key(&exercise.relative_path, ContentType::Task, area.width);
-  let (lines, links) = if let Some(cached) = cache.get(&cache_key, &content) {
+  let (lines, links) = if let Some(cached) = cache.get_cached(&cache_key) {
     (cached.lines.clone(), cached.links.clone())
   } else {
+    let content = match fs::read_to_string(&exercise.task_path) {
+      Ok(text) => {
+        let stripped = strip_frontmatter(&text);
+        stripped.replace("\r\n", "\n")
+      }
+      Err(e) => format!("Error reading task file: {e}"),
+    };
     let (lines, links) = parse_markdown_with_links(&content, area.width);
     cache.insert(cache_key, CachedContent::new(lines.clone(), links.clone(), &content));
     (lines, links)
@@ -374,20 +370,9 @@ fn render_solution_page(
     return (None, 1);
   }
 
-  // Build content string for cache key hashing
-  let mut content_for_hash = String::new();
-  if let Some(ref solution_path) = exercise.solution_source
-    && let Ok(source) = fs::read_to_string(solution_path)
-  {
-    content_for_hash.push_str(&source);
-  }
-  if let Some(ref sd) = exercise.solution_data {
-    content_for_hash.push_str(&sd.explanation);
-  }
-
-  // Try cache first
+  // Try cache first — invalidated by file watcher or exercise switch, not per-frame
   let cache_key = RenderCache::make_key(&exercise.relative_path, ContentType::Solution, area.width);
-  if let Some(cached) = cache.get(&cache_key, &content_for_hash) {
+  if let Some(cached) = cache.get_cached(&cache_key) {
     let content_height = cached.lines.len();
     let title = scroll_title("Solution", scroll_offset, content_height, area.height);
     let block = Block::default().borders(Borders::TOP).title(title);
@@ -410,11 +395,14 @@ fn render_solution_page(
   // Cache miss - build content
   let mut lines: Vec<Line<'_>> = Vec::new();
   let mut solution_links: Vec<LinkSpan> = Vec::new();
+  let mut content_for_hash = String::new();
 
   // Source code from solution file
   if let Some(ref solution_path) = exercise.solution_source {
     match fs::read_to_string(solution_path) {
       Ok(source) => {
+        content_for_hash.push_str(&source);
+        let source = source.replace("\r\n", "\n");
         // Use term_caps for cross-platform separator characters
         let sep_char = chars::horizontal();
         lines.push(Line::from(Span::styled(
@@ -435,6 +423,7 @@ fn render_solution_page(
   if let Some(ref sd) = exercise.solution_data
     && !sd.explanation.is_empty()
   {
+    content_for_hash.push_str(&sd.explanation);
     solution_links = append_explanation(&mut lines, sd, area.width);
   }
 

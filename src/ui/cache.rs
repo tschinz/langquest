@@ -118,6 +118,14 @@ impl RenderCache {
     self.entries.get(key).filter(|cached| cached.matches_content(content))
   }
 
+  /// Get cached content by key without re-reading or re-hashing source content.
+  ///
+  /// Use this in hot render paths where cache invalidation is handled
+  /// explicitly (file watcher events, exercise switches, terminal resize).
+  pub fn get_cached(&self, key: &CacheKey) -> Option<&CachedContent> {
+    self.entries.get(key)
+  }
+
   /// Store content in the cache.
   ///
   /// If the cache is full, the oldest entry is evicted.
