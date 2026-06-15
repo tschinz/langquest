@@ -102,7 +102,7 @@ fn render_progress_bar(frame: &mut Frame, area: Rect, _modules: &[TreeNode], exe
   let overhead = label_prefix.len() + label_suffix_example.len();
   let bar_width = (area.width as usize).saturating_sub(overhead);
 
-  let filled = if total == 0 { 0 } else { (bar_width * completed) / total };
+  let filled = (bar_width * completed).checked_div(total).unwrap_or(0);
   let empty = bar_width.saturating_sub(filled);
 
   let mut spans: Vec<Span<'_>> = Vec::new();

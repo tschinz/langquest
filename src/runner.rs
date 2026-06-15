@@ -915,6 +915,9 @@ fn verify_cpp(exercise: &Exercise, cpp_cfg: &CppConfig) -> VerificationResult {
   let threshold = exercise.language.threshold();
   let test_bin = exercise.dir.join(".lq_test");
 
+  // Remove any stale binary from a previous run to avoid Text file busy.
+  let _ = fs::remove_file(&test_bin);
+
   // --- collect sources ------------------------------------------------
   let sources = collect_cpp_sources(&exercise.dir);
   if sources.is_empty() {

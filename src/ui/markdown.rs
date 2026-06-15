@@ -427,11 +427,10 @@ impl Renderer {
       // are preserved.  This differs from HTML reflow but is the right
       // behaviour for a terminal renderer where wrapping is handled by
       // the Paragraph widget, not the content author.
-      Event::SoftBreak => {
-        if !self.in_code_block && !self.current_spans.is_empty() {
+      Event::SoftBreak
+        if !self.in_code_block && !self.current_spans.is_empty() => {
           self.flush_line();
         }
-      }
 
       // ── Hard break: explicit newline ──────────────────────────────────
       Event::HardBreak => {
@@ -595,14 +594,13 @@ impl Renderer {
         self.pending_blank = true;
       }
 
-      TagEnd::Item => {
+      TagEnd::Item
         // Flush only if there are spans that weren't already flushed by
         // a child `Paragraph` end (tight list items have no Paragraph
         // wrapper, so their text lives directly in current_spans here).
-        if !self.current_spans.is_empty() {
+        if !self.current_spans.is_empty() => {
           self.flush_line();
         }
-      }
 
       // ── Inline formatting ─────────────────────────────────────────────
       TagEnd::Strong => self.bold = self.bold.saturating_sub(1),
