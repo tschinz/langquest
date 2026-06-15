@@ -31,6 +31,8 @@ enum Command {
 }
 
 fn main() -> Result<()> {
+  eprintln!(" LangQuest v{} starting…", env!("CARGO_PKG_VERSION"));
+
   let cli = Cli::parse();
 
   if cli.reset {
@@ -98,6 +100,18 @@ fn handle_status(repo: Option<PathBuf>) -> Result<()> {
 /// Default handler (no subcommand, no `--reset`): launch the TUI.
 fn handle_default(repo: Option<PathBuf>) -> Result<()> {
   let repo_path = config::resolve_repo_path(repo.as_deref());
+  eprintln!("   Repository: {}", repo_path.display());
+
+  eprint!("   Loading exercises…");
+  std::io::stderr().flush()?;
   let mut application = app::App::new(repo_path)?;
-  application.run()
+
+  let total = application.exercises.len();
+  eprintln!(" found {total} exercise(s) across {} module(s).", application.modules.len());
+  eprintln!("   Entering TUI (press q to quit)…");
+
+  application.run()?;
+
+  eprintln!("   Goodbye!");
+  Ok(())
 }

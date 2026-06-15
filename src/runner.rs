@@ -163,6 +163,8 @@ fn build_rust_command(cfg: &RustConfig, src_path: &Path, out_path: &Path) -> Res
 ///
 /// Score is `passed / (passed + failed)` based on lines matching
 /// `test … … ok` and `test … … FAILED` in the test-harness output.
+/// Runs tests with `--nocapture` so `println!` inside test functions
+/// is visible in the output.
 fn verify_rust(exercise: &Exercise, rust_cfg: &RustConfig) -> VerificationResult {
   let threshold = exercise.language.threshold();
   let test_bin = exercise.dir.join(".lq_test");
@@ -187,8 +189,8 @@ fn verify_rust(exercise: &Exercise, rust_cfg: &RustConfig) -> VerificationResult
     return VerificationResult::zero(cap_output(&out, MAX_OUTPUT_LINES), threshold);
   }
 
-  // --- run tests ------------------------------------------------------
-  let run = Command::new(&test_bin).current_dir(&exercise.dir).output();
+  // --- run tests (with --nocapture so println! inside tests is visible) -
+  let run = Command::new(&test_bin).arg("--nocapture").current_dir(&exercise.dir).output();
 
   // best-effort cleanup regardless of run outcome
   let _ = fs::remove_file(&test_bin);
@@ -228,6 +230,52 @@ fn verify_rust(exercise: &Exercise, rust_cfg: &RustConfig) -> VerificationResult
     output: cap_output(&out, MAX_OUTPUT_LINES),
     threshold,
   }
+}
+
+/// Compile and run the exercise source as a regular binary (without `--test`)
+/// and return its combined stdout + stderr.
+///
+/// The test harness never calls the exercise's `main()`, so this function
+/// provides a way to capture `println!` output from `main()` for display
+/// in the dedicated "Debug" page of the TUI.
+///
+/// Returns an empty string if the source cannot be compiled as a regular
+/// binary (e.g. it only defines library functions without a `main`).
+pub fn rust_run_main(exercise: &Exercise, rust_cfg: &RustConfig) -> String {
+  let test_bin = exercise.dir.join(".lq_test");
+  let run_bin = exercise.dir.join(".lq_run");
+
+  let (compile_bin, compile_args) = match build_rust_command(rust_cfg, &exercise.source_path, &test_bin) {
+    Ok(b) => b,
+    Err(_) => return String::new(),
+  };
+
+  // Strip `--test` and redirect the output to the run binary.
+  let test_bin_str = test_bin.to_string_lossy().to_string();
+  let run_bin_str = run_bin.to_string_lossy().to_string();
+
+  let run_args: Vec<String> = compile_args
+    .iter()
+    .filter(|a| *a != "--test")
+    .map(|a| if *a == test_bin_str { run_bin_str.clone() } else { a.clone() })
+    .collect();
+
+  let Ok(compile_run) = Command::new(&compile_bin).args(&run_args).current_dir(&exercise.dir).output() else {
+    return String::new();
+  };
+
+  if !compile_run.status.success() {
+    let _ = fs::remove_file(&run_bin);
+    return String::new();
+  }
+
+  let output = match Command::new(&run_bin).current_dir(&exercise.dir).output() {
+    Ok(o) => combined_output(&o),
+    Err(_) => String::new(),
+  };
+
+  let _ = fs::remove_file(&run_bin);
+  output
 }
 
 // ---------------------------------------------------------------------------

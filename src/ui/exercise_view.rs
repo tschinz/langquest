@@ -64,6 +64,8 @@ struct ViewParams<'a> {
   hints_revealed: usize,
   solution_unlock_pending: bool,
   last_result: Option<&'a VerificationResult>,
+  /// Output from running the exercise's `main()` (empty if unavailable).
+  last_main_output: &'a str,
   config_state: ExerciseState,
   scroll_offset: usize,
 }
@@ -79,6 +81,7 @@ pub fn render(app: &mut App, frame: &mut Frame, area: Rect) -> Option<PendingOsc
   let hints_revealed = app.hints_revealed;
   let solution_unlock_pending = app.solution_unlock_pending;
   let last_result = app.last_result.as_ref();
+  let last_main_output = app.last_main_output.as_str();
   let config_state = app.config.get_state(&exercise.relative_path);
   let scroll_offset = app.scroll_offset;
 
@@ -88,6 +91,7 @@ pub fn render(app: &mut App, frame: &mut Frame, area: Rect) -> Option<PendingOsc
     hints_revealed,
     solution_unlock_pending,
     last_result,
+    last_main_output,
     config_state,
     scroll_offset,
   };
@@ -148,6 +152,10 @@ fn render_content(frame: &mut Frame, area: Rect, params: &ViewParams<'_>, cache:
     ExercisePage::Task => {
       let (pending, content_height) = render_task(frame, area, params.exercise, params.scroll_offset, cache);
       (pending, content_height, viewport_height)
+    }
+    ExercisePage::Debug => {
+      let content_height = render_debug(frame, area, params.last_main_output, params.scroll_offset);
+      (None, content_height, viewport_height)
     }
     ExercisePage::Output => {
       let content_height = render_output(
@@ -247,10 +255,39 @@ fn render_task(frame: &mut Frame, area: Rect, exercise: &Exercise, scroll_offset
 }
 
 // ---------------------------------------------------------------------------
-// Page 3: Output
+// Page 3: Debug (main() output)
 // ---------------------------------------------------------------------------
 
-/// Returns content_line_count for scroll limiting.
+/// Render the output of the exercise's `main()` in the dedicated "Debug" page.
+///
+/// Shows a placeholder message when no main output is available (the source
+/// doesn't have a `fn main` or can't be compiled as a regular binary).
+fn render_debug(frame: &mut Frame, area: Rect, main_output: &str, scroll_offset: usize) -> usize {
+  let lines: Vec<Line> = if main_output.is_empty() {
+    vec![Line::from(Span::styled(
+      "No main() output — the exercise either doesn't have a fn main or it could not be compiled as a regular binary.",
+      Style::default().fg(Color::DarkGray),
+    ))]
+  } else {
+    main_output.lines().map(|line| Line::from(Span::raw(line.to_string()))).collect()
+  };
+
+  let content_height = lines.len();
+  let title = scroll_title("Debug", scroll_offset, content_height, area.height);
+
+  let paragraph = Paragraph::new(lines)
+    .block(Block::default().borders(Borders::TOP).title(title))
+    .scroll((scroll_offset as u16, 0))
+    .wrap(Wrap { trim: false });
+
+  frame.render_widget(paragraph, area);
+  content_height
+}
+
+// ---------------------------------------------------------------------------
+// Page 4: Output (test results)
+// ---------------------------------------------------------------------------
+
 fn render_output(
   frame: &mut Frame,
   area: Rect,
@@ -636,24 +673,27 @@ mod tests {
   fn page_index_values() {
     assert_eq!(ExercisePage::Theory.index(), 0);
     assert_eq!(ExercisePage::Task.index(), 1);
-    assert_eq!(ExercisePage::Output.index(), 2);
-    assert_eq!(ExercisePage::Solution.index(), 3);
+    assert_eq!(ExercisePage::Debug.index(), 2);
+    assert_eq!(ExercisePage::Output.index(), 3);
+    assert_eq!(ExercisePage::Solution.index(), 4);
   }
 
   #[test]
   fn page_from_index_roundtrip() {
     assert_eq!(ExercisePage::from_index(0), ExercisePage::Theory);
     assert_eq!(ExercisePage::from_index(1), ExercisePage::Task);
-    assert_eq!(ExercisePage::from_index(2), ExercisePage::Output);
-    assert_eq!(ExercisePage::from_index(3), ExercisePage::Solution);
+    assert_eq!(ExercisePage::from_index(2), ExercisePage::Debug);
+    assert_eq!(ExercisePage::from_index(3), ExercisePage::Output);
+    assert_eq!(ExercisePage::from_index(4), ExercisePage::Solution);
     // Wraps around
-    assert_eq!(ExercisePage::from_index(4), ExercisePage::Theory);
+    assert_eq!(ExercisePage::from_index(5), ExercisePage::Theory);
   }
 
   #[test]
   fn page_label_values() {
     assert_eq!(ExercisePage::Theory.label(), "Theory");
     assert_eq!(ExercisePage::Task.label(), "Task");
+    assert_eq!(ExercisePage::Debug.label(), "Debug");
     assert_eq!(ExercisePage::Output.label(), "Output");
     assert_eq!(ExercisePage::Solution.label(), "Solution");
   }

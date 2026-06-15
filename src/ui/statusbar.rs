@@ -101,7 +101,13 @@ fn render_tabs_row(frame: &mut Frame, area: Rect, view: View, page: ExercisePage
   // ── Sub-view tabs (context-sensitive) ─────────────────────────────────────
   match view {
     View::ExerciseView => {
-      const PAGES: &[ExercisePage] = &[ExercisePage::Theory, ExercisePage::Task, ExercisePage::Output, ExercisePage::Solution];
+      const PAGES: &[ExercisePage] = &[
+        ExercisePage::Theory,
+        ExercisePage::Task,
+        ExercisePage::Debug,
+        ExercisePage::Output,
+        ExercisePage::Solution,
+      ];
       for (i, p) in PAGES.iter().enumerate() {
         if i > 0 {
           spans.push(dim_sep("  ·  "));

@@ -33,7 +33,10 @@ pub enum ExercisePage {
   Theory,
   /// Task description.
   Task,
-  /// Verification output.
+  /// Output of the exercise's `main()` for debugging (only appears when
+  /// the source has a `fn main` that compiles and runs successfully).
+  Debug,
+  /// Verification output (test results).
   Output,
   /// Reference solution (gated).
   Solution,
@@ -41,15 +44,22 @@ pub enum ExercisePage {
 
 impl ExercisePage {
   /// All pages in display order.
-  const ALL: [ExercisePage; 4] = [ExercisePage::Theory, ExercisePage::Task, ExercisePage::Output, ExercisePage::Solution];
+  const ALL: [ExercisePage; 5] = [
+    ExercisePage::Theory,
+    ExercisePage::Task,
+    ExercisePage::Debug,
+    ExercisePage::Output,
+    ExercisePage::Solution,
+  ];
 
   /// Index of this page in the page list.
   pub(crate) fn index(self) -> usize {
     match self {
       ExercisePage::Theory => 0,
       ExercisePage::Task => 1,
-      ExercisePage::Output => 2,
-      ExercisePage::Solution => 3,
+      ExercisePage::Debug => 2,
+      ExercisePage::Output => 3,
+      ExercisePage::Solution => 4,
     }
   }
 
@@ -63,6 +73,7 @@ impl ExercisePage {
     match self {
       ExercisePage::Theory => "Theory",
       ExercisePage::Task => "Task",
+      ExercisePage::Debug => "Debug",
       ExercisePage::Output => "Output",
       ExercisePage::Solution => "Solution",
     }
@@ -89,6 +100,10 @@ pub struct App {
   pub hints_revealed: usize,
   /// Most recent verification result.
   pub last_result: Option<VerificationResult>,
+  /// Captured stdout/stderr from running the exercise's `main()` as a
+  /// regular binary. Displayed in the "Debug" page. Empty when the source
+  /// doesn't have a `fn main` or can't be compiled as a regular binary.
+  pub last_main_output: String,
   /// Cursor position in the Overview table.
   pub overview_cursor: usize,
   /// Whether the tree panel is visible in the Overview.
@@ -159,6 +174,7 @@ impl App {
       page: ExercisePage::Theory,
       hints_revealed: 0,
       last_result: None,
+      last_main_output: String::new(),
       overview_cursor: current_index,
       show_tree: true,
       show_menu: true,
@@ -222,6 +238,7 @@ impl App {
     self.config.current_exercise = Some(exercise.relative_path.clone());
     self.hints_revealed = 0;
     self.solution_unlock_pending = false;
+    self.last_main_output.clear();
     self.page = ExercisePage::Theory;
     self.scroll_offset = 0;
     self.setup_watcher();
@@ -258,6 +275,11 @@ impl App {
     let result = runner::verify(&exercise, &self.config);
     self.config.update_score(&exercise.relative_path, result.score, result.threshold);
     self.last_result = Some(result);
+
+    // Capture output from the exercise's main() for the "Debug" page.
+    if exercise.language == crate::exercise::Language::Rust {
+      self.last_main_output = runner::rust_run_main(&exercise, &self.config.rust);
+    }
   }
 
   /// The main TUI event loop.
@@ -578,9 +600,9 @@ impl App {
       return;
     }
 
-    // On Theory or Task pages, switch to Output first; ignore on Solution.
+    // On Theory, Task, or Debug pages, switch to Output first; ignore on Solution.
     match self.page {
-      ExercisePage::Theory | ExercisePage::Task => {
+      ExercisePage::Theory | ExercisePage::Task | ExercisePage::Debug => {
         self.page = ExercisePage::Output;
         self.scroll_offset = 0;
       }
