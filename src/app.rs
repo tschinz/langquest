@@ -9,7 +9,7 @@ use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifier
 use ratatui::prelude::*;
 
 use crate::config::{self, ProjectConfig};
-use crate::exercise::{Exercise, ExerciseStatus, Module, discover_exercises};
+use crate::exercise::{Exercise, ExerciseStatus, TreeNode, discover_exercises};
 use crate::runner::{self, ExerciseWatcher, VerificationResult};
 use crate::ui;
 use crate::ui::cache::RenderCache;
@@ -82,10 +82,10 @@ impl ExercisePage {
 
 /// Main application state.
 pub struct App {
-  /// Discovered exercise modules.
-  pub modules: Vec<Module>,
-  /// Flat index mapping: `(module_idx, exercise_idx)` for each exercise.
-  pub exercises: Vec<(usize, usize)>,
+  /// Tree of discovered groups and exercises.
+  pub tree: Vec<TreeNode>,
+  /// Flat list of all exercises (depth-first order, for linear navigation).
+  pub exercises: Vec<Exercise>,
   /// Persisted project configuration.
   pub config: ProjectConfig,
   /// Path to the `lq.toml` config file.
@@ -136,21 +136,9 @@ impl App {
   /// Returns an error if no exercises are found or if the config cannot be
   /// loaded.
   pub fn new(repo_path: PathBuf) -> Result<Self> {
-    let (modules, _errors) = discover_exercises(&repo_path);
+    let (tree, all_exercises, _errors) = discover_exercises(&repo_path);
 
-    if modules.is_empty() {
-      bail!("no exercises found in {}", repo_path.display());
-    }
-
-    // Build the flat index.
-    let mut exercises = Vec::new();
-    for (mi, module) in modules.iter().enumerate() {
-      for ei in 0..module.exercises.len() {
-        exercises.push((mi, ei));
-      }
-    }
-
-    if exercises.is_empty() {
+    if all_exercises.is_empty() {
       bail!("no exercises found in {}", repo_path.display());
     }
 
@@ -161,12 +149,12 @@ impl App {
     let current_index = config
       .current_exercise
       .as_deref()
-      .and_then(|name| exercises.iter().position(|&(mi, ei)| modules[mi].exercises[ei].relative_path == name))
+      .and_then(|name| all_exercises.iter().position(|ex| ex.relative_path == name))
       .unwrap_or(0);
 
     let mut app = App {
-      modules,
-      exercises,
+      tree,
+      exercises: all_exercises,
       config,
       config_path: cfg_path,
       current_index,
@@ -197,15 +185,13 @@ impl App {
 
   /// Get a reference to the exercise at `current_index`.
   pub fn current_exercise(&self) -> &Exercise {
-    let (mi, ei) = self.exercises[self.current_index];
-    &self.modules[mi].exercises[ei]
+    &self.exercises[self.current_index]
   }
 
   /// Get the exercise at a specific flat index.
   #[allow(dead_code)]
   pub fn exercise_at(&self, index: usize) -> &Exercise {
-    let (mi, ei) = self.exercises[index];
-    &self.modules[mi].exercises[ei]
+    &self.exercises[index]
   }
 
   /// Derive the current exercise's status from persisted config state.
@@ -571,14 +557,8 @@ impl App {
     self.scroll_offset = 0;
   }
 
-  /// Move to the next exercise. Blocked unless current exercise's
-  /// `solution_seen` is true.
+  /// Move to the next exercise (no blocking).
   fn handle_next(&mut self) {
-    let exercise = self.current_exercise();
-    let state = self.config.get_state(&exercise.relative_path);
-    if !state.solution_seen {
-      return;
-    }
     let new_index = self.current_index + 1;
     if new_index < self.exercises.len() {
       self.switch_exercise(new_index);
@@ -805,7 +785,7 @@ impl App {
         ui::overview::render(
           frame,
           content_area,
-          &self.modules,
+          &self.tree,
           &self.exercises,
           &self.config,
           self.overview_cursor,

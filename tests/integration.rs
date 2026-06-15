@@ -47,15 +47,15 @@ mod discovery {
 
   #[test]
   fn discovers_all_modules() {
-    let (modules, errors) = lq::exercise::discover_exercises(&sample_repo());
+    let (tree, _all_exercises, errors) = lq::exercise::discover_exercises(&sample_repo());
 
-    // There should be 6 modules in the fixture repo.
+    // There should be 6 top-level groups in the fixture repo.
     assert_eq!(
-      modules.len(),
+      tree.len(),
       6,
       "expected 6 modules, got {}: {:?}",
-      modules.len(),
-      modules.iter().map(|m| &m.name).collect::<Vec<_>>()
+      tree.len(),
+      tree.iter().map(|n| &n.name).collect::<Vec<_>>()
     );
 
     // No discovery errors on a well-formed repo.
@@ -64,8 +64,8 @@ mod discovery {
 
   #[test]
   fn module_order_matches_numeric_prefix() {
-    let (modules, _) = lq::exercise::discover_exercises(&sample_repo());
-    let names: Vec<&str> = modules.iter().map(|m| m.name.as_str()).collect();
+    let (tree, _all_exercises, _) = lq::exercise::discover_exercises(&sample_repo());
+    let names: Vec<&str> = tree.iter().map(|n| n.name.as_str()).collect();
 
     assert_eq!(names[0], "01-rust");
     assert_eq!(names[1], "02-python");
@@ -75,20 +75,20 @@ mod discovery {
 
   #[test]
   fn rust_has_one_exercise() {
-    let (modules, _) = lq::exercise::discover_exercises(&sample_repo());
-    let basics = modules.iter().find(|m| m.name == "01-rust");
+    let (tree, _all_exercises, _) = lq::exercise::discover_exercises(&sample_repo());
+    let basics = tree.iter().find(|n| n.name == "01-rust" && n.is_group());
     assert!(basics.is_some(), "01-rust module not found");
     let basics = basics.unwrap();
-    assert_eq!(basics.exercises.len(), 1);
+    // 01-rust now has 1 direct exercise + 1 subgroup with 3 nested exercises
+    assert!(basics.children.len() >= 2, "expected at least 2 children under 01-rust");
+    let ex_count = count_exercises(&basics.children);
+    assert_eq!(ex_count, 4, "expected 4 total exercises under 01-rust");
   }
 
   #[test]
   fn exercise_metadata_parsed_correctly() {
-    let (modules, _) = lq::exercise::discover_exercises(&sample_repo());
-    let hello = modules
-      .iter()
-      .find(|m| m.name == "01-rust")
-      .and_then(|m| m.exercises.iter().find(|e| e.id == "hello_rust"));
+    let (_tree, all_exercises, _) = lq::exercise::discover_exercises(&sample_repo());
+    let hello = all_exercises.iter().find(|e| e.id == "hello_rust");
 
     assert!(hello.is_some(), "hello_rust exercise not found");
     let hello = hello.unwrap();
@@ -102,8 +102,8 @@ mod discovery {
 
   #[test]
   fn exercise_has_theory_and_task_paths() {
-    let (modules, _) = lq::exercise::discover_exercises(&sample_repo());
-    let ex = &modules[0].exercises[0];
+    let (_tree, all_exercises, _) = lq::exercise::discover_exercises(&sample_repo());
+    let ex = &all_exercises[0];
 
     assert!(ex.theory_path.is_some(), "theory_path should be set for {}", ex.id);
     assert!(ex.theory_path.as_ref().unwrap().exists(), "theory_path should point to an existing file");
@@ -113,8 +113,8 @@ mod discovery {
 
   #[test]
   fn exercise_has_solution_data() {
-    let (modules, _) = lq::exercise::discover_exercises(&sample_repo());
-    let ex = &modules[0].exercises[0];
+    let (_tree, all_exercises, _) = lq::exercise::discover_exercises(&sample_repo());
+    let ex = &all_exercises[0];
 
     assert!(ex.solution_data.is_some(), "solution_data should be loaded for {}", ex.id);
     let sol = ex.solution_data.as_ref().unwrap();
@@ -124,8 +124,8 @@ mod discovery {
 
   #[test]
   fn relative_path_is_module_slash_exercise() {
-    let (modules, _) = lq::exercise::discover_exercises(&sample_repo());
-    let ex = &modules[0].exercises[0];
+    let (_tree, all_exercises, _) = lq::exercise::discover_exercises(&sample_repo());
+    let ex = &all_exercises[0];
 
     assert!(ex.relative_path.contains('/'), "relative_path should contain a slash: {}", ex.relative_path);
     assert!(
@@ -137,87 +137,98 @@ mod discovery {
 
   #[test]
   fn python_exercises_detected() {
-    let (modules, _) = lq::exercise::discover_exercises(&sample_repo());
-    let python_mod = modules.iter().find(|m| m.name == "02-python");
+    let (tree, _all_exercises, _) = lq::exercise::discover_exercises(&sample_repo());
+    let python_mod = tree.iter().find(|n| n.name == "02-python" && n.is_group());
     assert!(python_mod.is_some(), "python module not found");
     let python_mod = python_mod.unwrap();
 
     assert!(
-      !python_mod.exercises.is_empty(),
+      !python_mod.children.is_empty(),
       "expected at least 1 python exercise, found {}",
-      python_mod.exercises.len()
+      python_mod.children.len()
     );
-    for ex in &python_mod.exercises {
-      assert_eq!(ex.language, lq::exercise::Language::Python);
+    for child in &python_mod.children {
+      if child.is_exercise() {
+        let ex = child.exercise.as_ref().unwrap();
+        assert_eq!(ex.language, lq::exercise::Language::Python);
+      }
     }
   }
 
   #[test]
   fn go_exercises_detected() {
-    let (modules, _) = lq::exercise::discover_exercises(&sample_repo());
+    let (tree, _all_exercises, _) = lq::exercise::discover_exercises(&sample_repo());
 
-    let go_mod = modules.iter().find(|m| m.name == "04-go");
+    let go_mod = tree.iter().find(|n| n.name == "04-go" && n.is_group());
     assert!(go_mod.is_some(), "04-go module not found");
     let go_mod = go_mod.unwrap();
 
-    assert!(
-      !go_mod.exercises.is_empty(),
-      "expected at least 1 Go exercise, found {}",
-      go_mod.exercises.len()
-    );
-    for ex in &go_mod.exercises {
-      assert_eq!(ex.language, lq::exercise::Language::Go);
+    assert!(!go_mod.children.is_empty(), "expected at least 1 Go exercise, found {}", go_mod.children.len());
+    for child in &go_mod.children {
+      if child.is_exercise() {
+        let ex = child.exercise.as_ref().unwrap();
+        assert_eq!(ex.language, lq::exercise::Language::Go);
+      }
     }
   }
 
   #[test]
   fn cpp_exercises_detected() {
-    let (modules, _) = lq::exercise::discover_exercises(&sample_repo());
+    let (tree, _all_exercises, _) = lq::exercise::discover_exercises(&sample_repo());
 
-    let cpp_mod = modules.iter().find(|m| m.name == "06-cpp");
+    let cpp_mod = tree.iter().find(|n| n.name == "06-cpp" && n.is_group());
     assert!(cpp_mod.is_some(), "06-cpp module not found");
     let cpp_mod = cpp_mod.unwrap();
 
     assert!(
-      !cpp_mod.exercises.is_empty(),
+      !cpp_mod.children.is_empty(),
       "expected at least 1 C++ exercise, found {}",
-      cpp_mod.exercises.len()
+      cpp_mod.children.len()
     );
-    for ex in &cpp_mod.exercises {
-      assert_eq!(ex.language, lq::exercise::Language::Cpp);
+    for child in &cpp_mod.children {
+      if child.is_exercise() {
+        let ex = child.exercise.as_ref().unwrap();
+        assert_eq!(ex.language, lq::exercise::Language::Cpp);
+      }
     }
   }
 
   #[test]
   fn assembly_exercises_detected() {
-    let (modules, _) = lq::exercise::discover_exercises(&sample_repo());
+    let (tree, _all_exercises, _) = lq::exercise::discover_exercises(&sample_repo());
 
-    let riscv = modules.iter().find(|m| m.name == "03-riscv");
+    let riscv = tree.iter().find(|n| n.name == "03-riscv" && n.is_group());
     assert!(riscv.is_some());
-    for ex in &riscv.unwrap().exercises {
-      assert_eq!(ex.language, lq::exercise::Language::Riscv);
+    for child in &riscv.unwrap().children {
+      if child.is_exercise() {
+        let ex = child.exercise.as_ref().unwrap();
+        assert_eq!(ex.language, lq::exercise::Language::Riscv);
+      }
     }
   }
 
   #[test]
   fn markdown_exercises_detected() {
-    let (modules, _) = lq::exercise::discover_exercises(&sample_repo());
+    let (tree, _all_exercises, _) = lq::exercise::discover_exercises(&sample_repo());
 
-    let md_mod = modules.iter().find(|m| m.name == "05-markdown");
+    let md_mod = tree.iter().find(|n| n.name == "05-markdown" && n.is_group());
     assert!(md_mod.is_some(), "05-markdown module not found");
     let md_mod = md_mod.unwrap();
 
-    assert!(!md_mod.exercises.is_empty(), "expected at least 1 markdown exercise");
-    for ex in &md_mod.exercises {
-      assert_eq!(ex.language, lq::exercise::Language::Text);
+    assert!(!md_mod.children.is_empty(), "expected at least 1 markdown exercise");
+    for child in &md_mod.children {
+      if child.is_exercise() {
+        let ex = child.exercise.as_ref().unwrap();
+        assert_eq!(ex.language, lq::exercise::Language::Text);
+      }
     }
   }
 
   #[test]
   fn empty_directory_yields_no_modules() {
     let tmp = TempDir::new("empty_discovery");
-    let (modules, errors) = lq::exercise::discover_exercises(tmp.path());
-    assert!(modules.is_empty());
+    let (tree, _all_exercises, errors) = lq::exercise::discover_exercises(tmp.path());
+    assert!(tree.is_empty());
     assert!(errors.is_empty());
   }
 
@@ -228,9 +239,14 @@ mod discovery {
     let _ = fs::create_dir_all(tmp.path().join(".hidden"));
     let _ = fs::create_dir_all(tmp.path().join("README.md"));
 
-    let (modules, errors) = lq::exercise::discover_exercises(tmp.path());
-    assert!(modules.is_empty());
+    let (tree, _all_exercises, errors) = lq::exercise::discover_exercises(tmp.path());
+    assert!(tree.is_empty());
     assert!(errors.is_empty());
+  }
+
+  /// Count total exercises in a tree node (recursive).
+  fn count_exercises(nodes: &[lq::exercise::TreeNode]) -> usize {
+    nodes.iter().map(|n| if n.is_exercise() { 1 } else { count_exercises(&n.children) }).sum()
   }
 }
 
@@ -489,11 +505,8 @@ mod runner {
 
   #[test]
   fn verify_go_exercise_from_sample_repo() {
-    let (modules, _) = lq::exercise::discover_exercises(&sample_repo());
-    let hello = modules
-      .iter()
-      .find(|m| m.name == "04-go")
-      .and_then(|m| m.exercises.iter().find(|e| e.id == "hello_go"));
+    let (_tree, all_exercises, _) = lq::exercise::discover_exercises(&sample_repo());
+    let hello = all_exercises.iter().find(|e| e.id == "hello_go");
 
     if let Some(exercise) = hello {
       let result = lq::runner::verify(exercise, &lq::config::ProjectConfig::default());
@@ -506,11 +519,8 @@ mod runner {
 
   #[test]
   fn verify_cpp_exercise_from_sample_repo() {
-    let (modules, _) = lq::exercise::discover_exercises(&sample_repo());
-    let hello = modules
-      .iter()
-      .find(|m| m.name == "06-cpp")
-      .and_then(|m| m.exercises.iter().find(|e| e.id == "hello_cpp"));
+    let (_tree, all_exercises, _) = lq::exercise::discover_exercises(&sample_repo());
+    let hello = all_exercises.iter().find(|e| e.id == "hello_cpp");
 
     if let Some(exercise) = hello {
       let result = lq::runner::verify(exercise, &lq::config::ProjectConfig::default());
@@ -523,11 +533,8 @@ mod runner {
 
   #[test]
   fn verify_cpp_solution_scores_perfectly() {
-    let (modules, _) = lq::exercise::discover_exercises(&sample_repo());
-    let hello = modules
-      .iter()
-      .find(|m| m.name == "06-cpp")
-      .and_then(|m| m.exercises.iter().find(|e| e.id == "hello_cpp"));
+    let (_tree, all_exercises, _) = lq::exercise::discover_exercises(&sample_repo());
+    let hello = all_exercises.iter().find(|e| e.id == "hello_cpp");
 
     let exercise = match hello {
       Some(e) => e,
@@ -560,11 +567,8 @@ mod runner {
 
   #[test]
   fn verify_rust_exercise_from_sample_repo() {
-    let (modules, _) = lq::exercise::discover_exercises(&sample_repo());
-    let hello = modules
-      .iter()
-      .find(|m| m.name == "01-rust")
-      .and_then(|m| m.exercises.iter().find(|e| e.id == "hello_world"));
+    let (_tree, all_exercises, _) = lq::exercise::discover_exercises(&sample_repo());
+    let hello = all_exercises.iter().find(|e| e.id == "hello_world");
 
     if let Some(exercise) = hello {
       let result = lq::runner::verify(exercise, &lq::config::ProjectConfig::default());
@@ -577,10 +581,10 @@ mod runner {
 
   #[test]
   fn verify_markdown_exercise_from_sample_repo() {
-    let (modules, _) = lq::exercise::discover_exercises(&sample_repo());
+    let (_tree, all_exercises, _) = lq::exercise::discover_exercises(&sample_repo());
     // No markdown/text exercise exists in the trimmed sample repo;
     // the test is a no-op but must still compile and pass.
-    let concept = modules.iter().find(|m| m.name == "08-concepts").and_then(|m| m.exercises.first());
+    let concept = all_exercises.iter().find(|e| e.language == lq::exercise::Language::Text);
 
     if let Some(exercise) = concept {
       assert_eq!(exercise.language, lq::exercise::Language::Text);
@@ -683,20 +687,18 @@ mod end_to_end {
     let tmp = TempDir::new("e2e_discover_persist");
     let cfg_path = tmp.path().join("lq.toml");
 
-    let (modules, errors) = lq::exercise::discover_exercises(&sample_repo());
+    let (_tree, all_exercises, errors) = lq::exercise::discover_exercises(&sample_repo());
     assert!(errors.is_empty());
 
     let mut cfg = lq::config::ProjectConfig::default();
 
     // Set the first exercise as current.
-    let first = modules.first().and_then(|m| m.exercises.first()).map(|e| e.relative_path.as_str());
+    let first = all_exercises.first().map(|e| e.relative_path.as_str());
     cfg.current_exercise = first.map(String::from);
 
     // Initialize state for all exercises.
-    for module in &modules {
-      for exercise in &module.exercises {
-        let _ = cfg.exercises.entry(exercise.relative_path.clone()).or_default();
-      }
+    for exercise in &all_exercises {
+      let _ = cfg.exercises.entry(exercise.relative_path.clone()).or_default();
     }
 
     cfg.save(&cfg_path).expect("save initial config");
@@ -704,8 +706,7 @@ mod end_to_end {
 
     assert!(loaded.current_exercise.is_some());
 
-    let total_exercises: usize = modules.iter().map(|m| m.exercises.len()).sum();
-    assert_eq!(loaded.exercises.len(), total_exercises);
+    assert_eq!(loaded.exercises.len(), all_exercises.len());
   }
 
   #[test]
@@ -741,7 +742,7 @@ mod end_to_end {
 
   #[test]
   fn reset_preserves_only_first_exercise_pointer() {
-    let (modules, _) = lq::exercise::discover_exercises(&sample_repo());
+    let (_tree, all_exercises, _) = lq::exercise::discover_exercises(&sample_repo());
 
     let mut cfg = lq::config::ProjectConfig {
       current_exercise: Some("03-ownership/01-ownership".into()),
@@ -750,7 +751,7 @@ mod end_to_end {
     cfg.update_score("01-basics/01-hello", 1.0, 0.7);
     cfg.update_score("02-flow/01-if-else", 0.9, 0.8);
 
-    let first_exercise = modules.first().and_then(|m| m.exercises.first()).map(|e| e.relative_path.as_str());
+    let first_exercise = all_exercises.first().map(|e| e.relative_path.as_str());
 
     cfg.reset(first_exercise);
 

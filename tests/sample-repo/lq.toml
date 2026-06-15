@@ -1,9 +1,24 @@
-current_exercise = "06-cpp/01-hello-world"
+current_exercise = "01-rust/01-hello-world"
 
 [exercises."01-rust/01-hello-world"]
 best_score = 0.0
 passed = false
 solution_seen = true
+
+[exercises."01-rust/02-variables/01-strings"]
+best_score = 0.0
+passed = false
+solution_seen = false
+
+[exercises."01-rust/02-variables/02-numbers"]
+best_score = 0.0
+passed = false
+solution_seen = false
+
+[exercises."01-rust/02-variables/03-booleans"]
+best_score = 0.5
+passed = false
+solution_seen = false
 
 [exercises."02-python/01-hello"]
 best_score = 0.0

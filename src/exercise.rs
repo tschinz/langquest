@@ -1,9 +1,9 @@
-//! Exercise and module data structures, frontmatter parsing, and repo scanning.
+//! Exercise and tree data structures, frontmatter parsing, and repo scanning.
 //!
 //! This module is responsible for discovering exercises in a repository,
 //! parsing their metadata from `02-task.md` frontmatter, loading solution
 //! data from `solution/solution.md`, and presenting them as structured
-//! [`Exercise`] and [`Module`] types.
+//! [`Exercise`] and [`TreeNode`] types.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -193,7 +193,7 @@ pub struct Exercise {
   pub description: String,
   /// Topic tags from frontmatter.
   pub topics: Vec<String>,
-  /// Parent module directory name (e.g. `"01-basics"`).
+  /// Parent path from repo root (e.g. `"01-basics"` or `"01-category/01-subcategory"`).
   #[allow(dead_code)]
   pub module_name: String,
   /// Relative path used as a key in `lq.toml` (e.g. `"01-basics/01-hello-world"`).
@@ -213,16 +213,33 @@ pub struct Exercise {
 }
 
 // ---------------------------------------------------------------------------
-// Module
+// TreeNode
 // ---------------------------------------------------------------------------
 
-/// A group of exercises under a numbered module directory.
+/// A node in the exercise tree, representing either a group (subdirectory
+/// with numbered subdirectories) or an exercise (leaf directory containing
+/// `02-task.md` and a student source file).
 #[derive(Debug, Clone)]
-pub struct Module {
-  /// Module directory name (e.g. `"01-basics"`).
+pub struct TreeNode {
+  /// Directory name (e.g. `"01-basics"` or `"01-hello-world"`).
   pub name: String,
-  /// Exercises contained in this module, sorted by numeric prefix.
-  pub exercises: Vec<Exercise>,
+  /// Sub-groups or sub-exercises.
+  pub children: Vec<TreeNode>,
+  /// If this node is an exercise, contains the exercise data.
+  /// `None` for groups.
+  pub exercise: Option<Exercise>,
+}
+
+impl TreeNode {
+  /// Whether this node is an exercise leaf.
+  pub fn is_exercise(&self) -> bool {
+    self.exercise.is_some()
+  }
+
+  /// Whether this node is a group (non-exercise directory).
+  pub fn is_group(&self) -> bool {
+    self.exercise.is_none()
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -394,7 +411,11 @@ pub fn load_exercise(exercise_dir: &Path, module_name: &str) -> Result<Exercise,
   // -- Build relative path ------------------------------------------------
   let exercise_dir_name = exercise_dir.file_name().and_then(|n| n.to_str()).unwrap_or("unknown");
 
-  let relative_path = format!("{module_name}/{exercise_dir_name}");
+  let relative_path = if module_name.is_empty() {
+    exercise_dir_name.to_string()
+  } else {
+    format!("{module_name}/{exercise_dir_name}")
+  };
 
   Ok(Exercise {
     id: fm.id,
@@ -520,98 +541,109 @@ fn find_solution_source(exercise_dir: &Path) -> Option<PathBuf> {
 // Repo discovery
 // ---------------------------------------------------------------------------
 
-/// Discover all modules and exercises under `repo_root`.
+/// Recursively discover exercises in the repository.
 ///
-/// Scans for directories matching the `<NN>-<title>` naming convention,
-/// treating top-level matches as modules and their children as exercises.
+/// Walks the directory tree starting at `repo_root`, looking for directories
+/// whose names match `^\d{2}-.+`. Any such directory that contains
+/// `02-task.md` is treated as an exercise; otherwise it is a group and is
+/// recursed into.
 ///
-/// Returns a tuple of `(modules, errors)`. Malformed exercises are skipped
-/// and their errors collected so the TUI can present partial results.
-pub fn discover_exercises(repo_root: &Path) -> (Vec<Module>, Vec<(PathBuf, ExerciseError)>) {
+/// Returns the tree structure, a flat list of all discovered exercises (in
+/// depth-first order, suitable for linear navigation), and any errors
+/// encountered.
+pub fn discover_exercises(repo_root: &Path) -> (Vec<TreeNode>, Vec<Exercise>, Vec<(PathBuf, ExerciseError)>) {
   let dir_pattern = match Regex::new(r"^\d{2}-.+") {
     Ok(re) => re,
-    Err(_) => return (Vec::new(), Vec::new()),
+    Err(_) => return (Vec::new(), Vec::new(), Vec::new()),
   };
 
-  let mut modules = Vec::new();
+  let mut all_exercises: Vec<Exercise> = Vec::new();
   let mut errors: Vec<(PathBuf, ExerciseError)> = Vec::new();
 
-  // -- Collect module directories -----------------------------------------
-  let mut module_dirs = match sorted_numbered_dirs(repo_root, &dir_pattern) {
-    Ok(dirs) => dirs,
-    Err(e) => {
-      errors.push((repo_root.to_path_buf(), e));
-      return (modules, errors);
-    }
-  };
-  module_dirs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+  let tree = build_tree(repo_root, "", &dir_pattern, &mut all_exercises, &mut errors);
 
-  for module_dir in &module_dirs {
-    let module_name = match module_dir.file_name().and_then(|n| n.to_str()) {
-      Some(n) => n.to_owned(),
-      None => continue,
-    };
-
-    // -- Collect exercise directories inside this module ----------------
-    let mut exercise_dirs = match sorted_numbered_dirs(module_dir, &dir_pattern) {
-      Ok(dirs) => dirs,
-      Err(e) => {
-        errors.push((module_dir.clone(), e));
-        continue;
-      }
-    };
-    exercise_dirs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
-
-    let mut exercises = Vec::new();
-
-    for ex_dir in &exercise_dirs {
-      match load_exercise(ex_dir, &module_name) {
-        Ok(exercise) => exercises.push(exercise),
-        Err(e) => errors.push((ex_dir.clone(), e)),
-      }
-    }
-
-    // Only include the module if it has at least one valid exercise.
-    if !exercises.is_empty() {
-      modules.push(Module { name: module_name, exercises });
-    }
-  }
-
-  (modules, errors)
+  (tree, all_exercises, errors)
 }
 
-/// List subdirectories of `parent` whose names match `pattern`, returned
-/// in a `Vec` for the caller to sort.
-fn sorted_numbered_dirs(parent: &Path, pattern: &Regex) -> Result<Vec<PathBuf>, ExerciseError> {
-  let entries = fs::read_dir(parent).map_err(|e| ExerciseError::FileRead {
-    path: parent.to_path_buf(),
-    source: e,
-  })?;
+/// Recursively build tree nodes for numbered subdirectories under `parent`.
+///
+/// - `parent_rel_path` is the relative path from `repo_root` to `parent`
+///   (e.g. `""` for root, `"01-basics"` for a top-level module, or
+///   `"01-basics/01-subgroup"` for a nested group).
+/// - Matching directories that contain `02-task.md` are loaded as exercises.
+/// - All other matching directories are recursed into as groups.
+fn build_tree(
+  parent: &Path,
+  parent_rel_path: &str,
+  pattern: &Regex,
+  exercises: &mut Vec<Exercise>,
+  errors: &mut Vec<(PathBuf, ExerciseError)>,
+) -> Vec<TreeNode> {
+  let entries = match fs::read_dir(parent) {
+    Ok(e) => e,
+    Err(e) => {
+      errors.push((
+        parent.to_path_buf(),
+        ExerciseError::FileRead {
+          path: parent.to_path_buf(),
+          source: e,
+        },
+      ));
+      return Vec::new();
+    }
+  };
 
-  let mut dirs = Vec::new();
-
-  for entry in entries {
-    let entry = entry.map_err(|e| ExerciseError::FileRead {
-      path: parent.to_path_buf(),
-      source: e,
-    })?;
+  let mut dirs: Vec<PathBuf> = Vec::new();
+  for entry in entries.flatten() {
     let path = entry.path();
-
     if !path.is_dir() {
       continue;
     }
-
-    let dir_name = match path.file_name().and_then(|n| n.to_str()) {
-      Some(n) => n,
+    let name = match path.file_name().and_then(|n| n.to_str()) {
+      Some(n) => n.to_string(),
       None => continue,
     };
+    if !pattern.is_match(&name) {
+      continue;
+    }
+    dirs.push(path);
+  }
+  dirs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
 
-    if pattern.is_match(dir_name) {
-      dirs.push(path);
+  let mut nodes = Vec::new();
+  for dir in dirs {
+    let name = dir.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string();
+    let child_rel = if parent_rel_path.is_empty() {
+      name.clone()
+    } else {
+      format!("{parent_rel_path}/{name}")
+    };
+
+    if dir.join("02-task.md").is_file() {
+      // This directory is an exercise leaf.
+      match load_exercise(&dir, parent_rel_path) {
+        Ok(ex) => {
+          nodes.push(TreeNode {
+            name,
+            children: Vec::new(),
+            exercise: Some(ex.clone()),
+          });
+          exercises.push(ex);
+        }
+        Err(e) => errors.push((dir, e)),
+      }
+    } else {
+      // This directory is a group - recurse.
+      let children = build_tree(&dir, &child_rel, pattern, exercises, errors);
+      nodes.push(TreeNode {
+        name,
+        children,
+        exercise: None,
+      });
     }
   }
 
-  Ok(dirs)
+  nodes
 }
 
 // ---------------------------------------------------------------------------
@@ -731,32 +763,71 @@ Do the thing.
   }
 
   #[test]
-  fn test_discover_exercises_collects_errors() {
-    let tmp = std::env::temp_dir().join("lq_test_discover_errors");
+  fn test_discover_exercises_recursive() {
+    let tmp = std::env::temp_dir().join("lq_test_discover_recursive");
     let _ = fs::remove_dir_all(&tmp);
 
+    // Top-level group
     let mod_dir = tmp.join("01-mod");
-    let good_dir = mod_dir.join("01-good");
-    let bad_dir = mod_dir.join("02-bad");
-    fs::create_dir_all(&good_dir).unwrap();
-    fs::create_dir_all(&bad_dir).unwrap();
+    // Exercise directly under module (original flat layout)
+    let ex1_dir = mod_dir.join("01-hello");
+    // Subgroup with nested exercise
+    let sub_dir = mod_dir.join("02-subgroup");
+    let ex2_dir = sub_dir.join("01-world");
 
-    // Good exercise
+    fs::create_dir_all(&ex1_dir).unwrap();
+    fs::create_dir_all(&ex2_dir).unwrap();
+
+    // Ex1: good exercise under module
     fs::write(
-      good_dir.join("02-task.md"),
-      "---\nid=\"g\"\nname=\"G\"\nlanguage=\"rust\"\ndifficulty=1\ndescription=\"d\"\ntopics=[]\n---\n",
+      ex1_dir.join("02-task.md"),
+      "---\nid=\"hello\"\nname=\"Hello\"\nlanguage=\"rust\"\ndifficulty=1\ndescription=\"d\"\ntopics=[]\n---\n",
     )
     .unwrap();
-    fs::write(good_dir.join("main.rs"), "").unwrap();
+    fs::write(ex1_dir.join("main.rs"), "").unwrap();
 
-    // Bad exercise - no 02-task.md
-    fs::write(bad_dir.join("main.rs"), "").unwrap();
+    // Ex2: nested exercise under subgroup
+    fs::write(
+      ex2_dir.join("02-task.md"),
+      "---\nid=\"world\"\nname=\"World\"\nlanguage=\"python\"\ndifficulty=2\ndescription=\"d\"\ntopics=[]\n---\n",
+    )
+    .unwrap();
+    fs::write(ex2_dir.join("main.py"), "").unwrap();
 
-    let (modules, errors) = discover_exercises(&tmp);
-    assert_eq!(modules.len(), 1);
-    assert_eq!(modules[0].exercises.len(), 1);
-    assert_eq!(modules[0].exercises[0].id, "g");
-    assert!(!errors.is_empty());
+    let (tree, all_exercises, errors) = discover_exercises(&tmp);
+
+    // No errors expected
+    assert!(errors.is_empty(), "unexpected errors: {errors:?}");
+
+    // Should have 2 exercises total
+    assert_eq!(all_exercises.len(), 2);
+    assert_eq!(all_exercises[0].id, "hello");
+    assert_eq!(all_exercises[1].id, "world");
+
+    // Tree structure: 01-mod -> [01-hello (ex), 02-subgroup -> [01-world (ex)]]
+    assert_eq!(tree.len(), 1);
+    let top = &tree[0];
+    assert_eq!(top.name, "01-mod");
+    assert!(top.is_group());
+    assert_eq!(top.children.len(), 2);
+
+    // First child: hello exercise
+    let c1 = &top.children[0];
+    assert_eq!(c1.name, "01-hello");
+    assert!(c1.is_exercise());
+    assert_eq!(c1.exercise.as_ref().unwrap().id, "hello");
+
+    // Second child: subgroup
+    let c2 = &top.children[1];
+    assert_eq!(c2.name, "02-subgroup");
+    assert!(c2.is_group());
+    assert_eq!(c2.children.len(), 1);
+
+    // Nested exercise
+    let nested = &c2.children[0];
+    assert_eq!(nested.name, "01-world");
+    assert!(nested.is_exercise());
+    assert_eq!(nested.exercise.as_ref().unwrap().id, "world");
 
     let _ = fs::remove_dir_all(&tmp);
   }

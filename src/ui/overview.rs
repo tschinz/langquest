@@ -13,7 +13,7 @@ use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 use super::table::{self, Column, TableData};
 use super::term_caps::chars;
 use crate::config::ProjectConfig;
-use crate::exercise::{ExerciseStatus, Module};
+use crate::exercise::{Exercise, ExerciseStatus, TreeNode};
 
 // ---------------------------------------------------------------------------
 // Status derivation
@@ -40,18 +40,10 @@ pub fn derive_status(state: &crate::config::ExerciseState) -> ExerciseStatus {
 
 /// Render the full Overview screen.
 ///
-/// `exercises` is a flat index of `(module_idx, exercise_idx)` pairs that
-/// determines the display order and the meaning of `overview_cursor`.
+/// `modules` is the tree of groups and exercises (for the tree panel).
+/// `exercises` is a flat list of all exercises (for the table and cursor).
 #[allow(clippy::too_many_arguments)]
-pub fn render(
-  frame: &mut Frame,
-  area: Rect,
-  modules: &[Module],
-  exercises: &[(usize, usize)],
-  config: &ProjectConfig,
-  overview_cursor: usize,
-  show_tree: bool,
-) {
+pub fn render(frame: &mut Frame, area: Rect, modules: &[TreeNode], exercises: &[Exercise], config: &ProjectConfig, overview_cursor: usize, show_tree: bool) {
   if area.height < 2 || area.width < 10 {
     return;
   }
@@ -93,18 +85,13 @@ pub fn render(
 // Progress bar
 // ---------------------------------------------------------------------------
 
-fn render_progress_bar(frame: &mut Frame, area: Rect, modules: &[Module], exercises: &[(usize, usize)], config: &ProjectConfig) {
+fn render_progress_bar(frame: &mut Frame, area: Rect, _modules: &[TreeNode], exercises: &[Exercise], config: &ProjectConfig) {
   let total = exercises.len();
   let completed = exercises
     .iter()
-    .filter(|&&(mi, ei)| {
-      if let Some(module) = modules.get(mi)
-        && let Some(exercise) = module.exercises.get(ei)
-      {
-        let state = config.get_state(&exercise.relative_path);
-        return derive_status(&state) == ExerciseStatus::Complete;
-      }
-      false
+    .filter(|ex| {
+      let state = config.get_state(&ex.relative_path);
+      derive_status(&state) == ExerciseStatus::Complete
     })
     .count();
 
@@ -134,7 +121,7 @@ fn render_progress_bar(frame: &mut Frame, area: Rect, modules: &[Module], exerci
 // Exercise table
 // ---------------------------------------------------------------------------
 
-fn render_exercise_table(frame: &mut Frame, area: Rect, modules: &[Module], exercises: &[(usize, usize)], config: &ProjectConfig, overview_cursor: usize) {
+fn render_exercise_table(frame: &mut Frame, area: Rect, _modules: &[TreeNode], exercises: &[Exercise], config: &ProjectConfig, overview_cursor: usize) {
   let columns = vec![
     Column {
       header: "ID".to_string(),
@@ -164,29 +151,20 @@ fn render_exercise_table(frame: &mut Frame, area: Rect, modules: &[Module], exer
 
   let rows: Vec<Vec<String>> = exercises
     .iter()
-    .map(|&(mi, ei)| {
-      let (id, name, lang_name, difficulty, status_text, topics) = if let Some(module) = modules.get(mi) {
-        if let Some(ex) = module.exercises.get(ei) {
-          let state = config.get_state(&ex.relative_path);
-          let status = derive_status(&state);
-          let stars = "*".repeat(ex.difficulty as usize);
-          let status_str = format!("{} {}", status.symbol(), status.label());
-          let topics_str = ex.topics.join(", ");
-          (
-            ex.id.clone(),
-            ex.name.clone(),
-            ex.language.display_name().to_string(),
-            stars,
-            status_str,
-            topics_str,
-          )
-        } else {
-          empty_row()
-        }
-      } else {
-        empty_row()
-      };
-      vec![id, name, lang_name, difficulty, status_text, topics]
+    .map(|ex| {
+      let state = config.get_state(&ex.relative_path);
+      let status = derive_status(&state);
+      let stars = "*".repeat(ex.difficulty as usize);
+      let status_str = format!("{} {}", status.symbol(), status.label());
+      let topics_str = ex.topics.join(", ");
+      vec![
+        ex.id.clone(),
+        ex.name.clone(),
+        ex.language.display_name().to_string(),
+        stars,
+        status_str,
+        topics_str,
+      ]
     })
     .collect();
 
@@ -206,37 +184,21 @@ fn render_exercise_table(frame: &mut Frame, area: Rect, modules: &[Module], exer
   table::render_table(frame, inner, &data, overview_cursor, header_style, highlight_style);
 }
 
-/// Produce a placeholder row when a module/exercise index is out of bounds.
-fn empty_row() -> (String, String, String, String, String, String) {
-  (String::new(), String::new(), String::new(), String::new(), String::new(), String::new())
-}
-
 // ---------------------------------------------------------------------------
 // Tree panel
 // ---------------------------------------------------------------------------
 
-fn render_tree_panel(frame: &mut Frame, area: Rect, modules: &[Module], exercises: &[(usize, usize)], config: &ProjectConfig, overview_cursor: usize) {
-  // Determine which (module_idx, exercise_idx) is selected.
-  let selected = exercises.get(overview_cursor).copied();
+fn render_tree_panel(frame: &mut Frame, area: Rect, nodes: &[TreeNode], exercises: &[Exercise], config: &ProjectConfig, overview_cursor: usize) {
+  let selected_path = exercises.get(overview_cursor).map(|ex| ex.relative_path.as_str());
 
   let mut lines: Vec<Line<'_>> = Vec::new();
 
-  for (mi, module) in modules.iter().enumerate() {
-    let exercise_count = module.exercises.len();
-    // Module header
-    lines.push(Line::from(Span::styled(
-      format!("  {}/", module.name),
-      Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
-    )));
-
-    for (ei, ex) in module.exercises.iter().enumerate() {
+  for node in nodes {
+    if let Some(ex) = &node.exercise {
+      // Top-level exercise (unusual but handle gracefully)
       let state = config.get_state(&ex.relative_path);
       let status = derive_status(&state);
-      let is_last = ei + 1 == exercise_count;
-      let connector = if is_last { chars::tree_last() } else { chars::tree_branch() };
-
-      let is_selected = selected == Some((mi, ei));
-
+      let is_selected = selected_path == Some(ex.relative_path.as_str());
       let style = if is_selected {
         Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
       } else {
@@ -246,12 +208,23 @@ fn render_tree_panel(frame: &mut Frame, area: Rect, modules: &[Module], exercise
           ExerciseStatus::Failing => Style::default().fg(Color::Red),
         }
       };
+      lines.push(Line::from(Span::styled(format!("  {} {}", status.symbol(), ex.name), style)));
+    } else {
+      // Top-level group header (no connector, matching old behaviour)
+      lines.push(Line::from(Span::styled(
+        format!("  {}/", node.name),
+        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+      )));
 
-      lines.push(Line::from(Span::styled(format!("  {connector} {} {}", status.symbol(), ex.name), style)));
+      // Render children recursively
+      let child_count = node.children.len();
+      for (i, child) in node.children.iter().enumerate() {
+        render_tree_node(child, config, selected_path, "    ", i + 1 == child_count, &mut lines);
+      }
+
+      // Blank line between top-level groups (matching old behaviour)
+      lines.push(Line::from(""));
     }
-
-    // Blank line between modules.
-    lines.push(Line::from(""));
   }
 
   let block = Block::default()
@@ -261,7 +234,7 @@ fn render_tree_panel(frame: &mut Frame, area: Rect, modules: &[Module], exercise
 
   // Scroll the tree so the selected exercise stays visible.
   let inner_height = block.inner(area).height as usize;
-  let selected_line = find_selected_line_in_tree(modules, exercises, overview_cursor);
+  let selected_line = find_selected_line_in_tree(nodes, exercises, overview_cursor);
   let scroll = if selected_line >= inner_height {
     (selected_line - inner_height + 1) as u16
   } else {
@@ -272,28 +245,87 @@ fn render_tree_panel(frame: &mut Frame, area: Rect, modules: &[Module], exercise
   frame.render_widget(paragraph, area);
 }
 
+/// Recursively render a tree node and its children.
+fn render_tree_node(node: &TreeNode, config: &ProjectConfig, selected_path: Option<&str>, prefix: &str, is_last: bool, lines: &mut Vec<Line<'_>>) {
+  let connector = if is_last { chars::tree_last() } else { chars::tree_branch() };
+
+  if let Some(ex) = &node.exercise {
+    let state = config.get_state(&ex.relative_path);
+    let status = derive_status(&state);
+    let is_selected = selected_path == Some(ex.relative_path.as_str());
+
+    let style = if is_selected {
+      Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+    } else {
+      match status {
+        ExerciseStatus::Complete => Style::default().fg(Color::Green),
+        ExerciseStatus::Partial => Style::default().fg(Color::Yellow),
+        ExerciseStatus::Failing => Style::default().fg(Color::Red),
+      }
+    };
+
+    lines.push(Line::from(Span::styled(format!("{prefix}{connector} {} {}", status.symbol(), ex.name), style)));
+  } else {
+    // Group header
+    lines.push(Line::from(Span::styled(
+      format!("{prefix}{connector} {}/", node.name),
+      Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+    )));
+
+    // Children
+    let child_prefix = format!("{prefix}{}", if is_last { "  " } else { "│ " });
+    let child_count = node.children.len();
+    for (i, child) in node.children.iter().enumerate() {
+      render_tree_node(child, config, selected_path, &child_prefix, i + 1 == child_count, lines);
+    }
+  }
+}
+
 /// Return the zero-based line index in the tree output that corresponds to
 /// the exercise at `overview_cursor`.
-fn find_selected_line_in_tree(modules: &[Module], exercises: &[(usize, usize)], overview_cursor: usize) -> usize {
-  let selected = match exercises.get(overview_cursor) {
-    Some(&pair) => pair,
-    None => return 0,
-  };
-
+fn find_selected_line_in_tree(nodes: &[TreeNode], exercises: &[Exercise], overview_cursor: usize) -> usize {
+  let selected_path = exercises.get(overview_cursor).map(|ex| ex.relative_path.as_str());
   let mut line: usize = 0;
-  for (mi, module) in modules.iter().enumerate() {
-    // Module header line.
-    line += 1;
-    for (ei, _) in module.exercises.iter().enumerate() {
-      if (mi, ei) == selected {
-        return line;
-      }
+  for node in nodes {
+    if node.is_group() {
+      // Top-level group header
       line += 1;
+      // Children (recursive) — return early if found
+      if find_selected_line_in_tree_children(&node.children, selected_path, &mut line) {
+        return line.saturating_sub(1);
+      }
+      // Blank line after top-level group
+      line += 1;
+    } else if let Some(ex) = &node.exercise {
+      // Top-level exercise
+      line += 1;
+      if selected_path == Some(ex.relative_path.as_str()) {
+        return line.saturating_sub(1);
+      }
     }
-    // Blank separator line after each module.
-    line += 1;
   }
-  0
+  line.saturating_sub(1)
+}
+
+/// Recursively traverse child tree nodes, counting rendered lines,
+/// until we find the exercise that matches `selected_path`.
+fn find_selected_line_in_tree_children(nodes: &[TreeNode], selected_path: Option<&str>, line: &mut usize) -> bool {
+  for node in nodes {
+    if let Some(ex) = &node.exercise {
+      *line += 1;
+      if selected_path == Some(ex.relative_path.as_str()) {
+        return true;
+      }
+    } else {
+      // Group header
+      *line += 1;
+      // Children
+      if find_selected_line_in_tree_children(&node.children, selected_path, line) {
+        return true;
+      }
+    }
+  }
+  false
 }
 
 // ---------------------------------------------------------------------------
