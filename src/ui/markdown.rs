@@ -427,10 +427,9 @@ impl Renderer {
       // are preserved.  This differs from HTML reflow but is the right
       // behaviour for a terminal renderer where wrapping is handled by
       // the Paragraph widget, not the content author.
-      Event::SoftBreak
-        if !self.in_code_block && !self.current_spans.is_empty() => {
-          self.flush_line();
-        }
+      Event::SoftBreak if !self.in_code_block && !self.current_spans.is_empty() => {
+        self.flush_line();
+      }
 
       // ── Hard break: explicit newline ──────────────────────────────────
       Event::HardBreak => {
