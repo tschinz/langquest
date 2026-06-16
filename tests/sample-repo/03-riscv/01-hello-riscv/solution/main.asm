@@ -5,7 +5,7 @@
 # - add: adds two registers
 # - addi: adds a register and an immediate value
 
-# EXPECT_REG: x5  10
+# EXPECT_REG: t0  10
 # EXPECT_REG: x6  32
 # EXPECT_REG: x7  42
 # EXPECT_REG: x28 142
