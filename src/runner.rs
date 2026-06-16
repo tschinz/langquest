@@ -297,69 +297,6 @@ struct AsmDirectives {
 // RISC-V directive parsing helpers
 // ---------------------------------------------------------------------------
 
-/// Mapping of RISC-V ABI register names to their canonical `xN` forms.
-///
-/// Each entry is `(abi_name, xN_name)`.  Where a register has more than one
-/// ABI alias (e.g. `s0` / `fp` both map to `x8`), the primary alias is listed
-/// first so that the reverse lookup (`xreg_to_abi`) returns it.
-const ABI_REGISTER_MAP: &[(&str, &str)] = &[
-  ("zero", "x0"),
-  ("ra", "x1"),
-  ("sp", "x2"),
-  ("gp", "x3"),
-  ("tp", "x4"),
-  ("t0", "x5"),
-  ("t1", "x6"),
-  ("t2", "x7"),
-  ("s0", "x8"),
-  ("fp", "x8"), // alternate alias for s0
-  ("s1", "x9"),
-  ("a0", "x10"),
-  ("a1", "x11"),
-  ("a2", "x12"),
-  ("a3", "x13"),
-  ("a4", "x14"),
-  ("a5", "x15"),
-  ("a6", "x16"),
-  ("a7", "x17"),
-  ("s2", "x18"),
-  ("s3", "x19"),
-  ("s4", "x20"),
-  ("s5", "x21"),
-  ("s6", "x22"),
-  ("s7", "x23"),
-  ("s8", "x24"),
-  ("s9", "x25"),
-  ("s10", "x26"),
-  ("s11", "x27"),
-  ("t3", "x28"),
-  ("t4", "x29"),
-  ("t5", "x30"),
-  ("t6", "x31"),
-];
-
-/// Convert a RISC-V ABI register name to its canonical `xN` form.
-///
-/// If `name` is already an `xN` name or is not a recognised ABI alias, it is
-/// returned unchanged.
-fn abi_to_xreg(name: &str) -> String {
-  ABI_REGISTER_MAP
-    .iter()
-    .find(|(abi, _)| *abi == name)
-    .map(|(_, xn)| *xn)
-    .unwrap_or(name)
-    .to_string()
-}
-
-/// Convert a canonical `xN` register name to its primary ABI alias.
-///
-/// Returns `None` if `name` has no ABI alias (e.g. `x0` → `Some("zero")`,
-/// an unrecognised name → `None`).  When a register has multiple aliases the
-/// first entry in [`ABI_REGISTER_MAP`] is returned (e.g. `x8` → `"s0"`).
-fn xreg_to_abi(name: &str) -> Option<&'static str> {
-  ABI_REGISTER_MAP.iter().find(|(_, xn)| *xn == name).map(|(abi, _)| *abi)
-}
-
 /// Parse a register value that may be decimal (`42`, `-1`) or hexadecimal
 /// (`0xFF`, `0x0000 0001`).  Spaces inside a hex literal are stripped so that
 /// formatted hex like `0x0000 0001` is accepted.
@@ -412,8 +349,7 @@ fn parse_asm_directives(source: &str) -> AsmDirectives {
           .or_else(|| val_raw.find(';').map(|i| val_raw[..i].trim()))
           .unwrap_or(val_raw);
         if let Some(val) = parse_reg_value(val_str) {
-          // Transform ABI aliases into corresponding xN register names for internal use, since Ripes outputs register values using xN names even when the source uses ABI aliases.
-          expected_regs.push((abi_to_xreg(&reg), val));
+          expected_regs.push((reg, val));
         }
       }
     }
@@ -700,24 +636,20 @@ fn verify_riscv(exercise: &Exercise, ripes_cfg: &RipesConfig) -> VerificationRes
   let mut report: Vec<String> = Vec::new();
 
   for (reg, expected) in &directives.expected_regs {
-    let reg_label = match xreg_to_abi(reg) {
-      Some(abi) => format!("{reg} ({abi})"),
-      None => reg.clone(),
-    };
     match registers.get(reg.as_str()) {
       Some(&actual) if regs_equal(actual, *expected) => {
         satisfied += 1;
-        report.push(format!("  ✓ {reg_label} = {expected} (0x{:08x})", *expected as u32));
+        report.push(format!("  ✓ {reg} = {expected} (0x{:08x})", *expected as u32));
       }
       Some(&actual) => {
         report.push(format!(
-          "  ✗ {reg_label}: expected {expected} (0x{:08x}), got {actual} (0x{:08x})",
+          "  ✗ {reg}: expected {expected} (0x{:08x}), got {actual} (0x{:08x})",
           *expected as u32, actual as u32
         ));
       }
       None => {
         report.push(format!(
-          "  ✗ {reg_label}: expected {expected} (0x{:08x}), register not found in output",
+          "  ✗ {reg}: expected {expected} (0x{:08x}), register not found in output",
           *expected as u32
         ));
       }
@@ -1497,14 +1429,6 @@ addi s2, s0, 1
     let src = "; EXPECT_REG: x5 -1\n";
     let d = parse_asm_directives(src);
     assert_eq!(d.expected_regs, vec![("x5".to_string(), -1)]);
-  }
-
-  #[test]
-  fn parse_asm_directives_abi() {
-    // Due to ripes log output, ABI names must be transformed to corresponding register names internally
-    let src = "; EXPECT_REG: s0 -1\n";
-    let d = parse_asm_directives(src);
-    assert_eq!(d.expected_regs, vec![("x8".to_string(), -1)]);
   }
 
   #[test]
