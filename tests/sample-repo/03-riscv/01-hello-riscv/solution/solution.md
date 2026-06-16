@@ -5,7 +5,7 @@ hints    = [
     "Use add to sum two registers: add rd, rs1, rs2",
     "Use addi to add an immediate value: addi rd, rs1, imm",
 ]
-keywords = []
+keywords = ["registers"]
 ---
 
 ## Explanation

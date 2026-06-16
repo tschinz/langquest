@@ -13,13 +13,14 @@
 //!   captures both stdout and stderr.  A 30-second timeout is not enforced at
 //!   the process level today; callers that need a bound should wrap the call in
 //!   a thread with a deadline.
-//! * Temporary artefacts (`.lq_test`, `.lq_main.o`, `.lq_main`) are cleaned up
+//! * Temporary artefacts (`.lq_test_*`, `.lq_main.o`, `.lq_main`) are cleaned up
 //!   on a best-effort basis - cleanup failures are silently ignored.
 
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
 
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
@@ -34,6 +35,10 @@ use crate::exercise::{Exercise, Language};
 
 /// Default maximum number of output lines retained by [`cap_output`].
 const MAX_OUTPUT_LINES: usize = 200;
+
+/// Counter for unique temporary file names, preventing "Text file busy"
+/// errors when multiple processes/tests share the same exercise directory.
+static LQ_TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 // ---------------------------------------------------------------------------
 // VerificationResult
@@ -981,9 +986,13 @@ fn build_cpp_command(cfg: &CppConfig, sources: &[PathBuf], out_path: &Path) -> R
 /// Score is `passed / (passed + failed)` based on the Catch2 summary line.
 fn verify_cpp(exercise: &Exercise, cpp_cfg: &CppConfig) -> VerificationResult {
   let threshold = exercise.language.threshold();
-  let test_bin = exercise.dir.join(".lq_test");
 
-  // Remove any stale binary from a previous run to avoid Text file busy.
+  // Use a unique binary name per invocation to avoid "Text file busy"
+  // (ETXTBUSY) when multiple tests or processes compile in the same dir.
+  let seq = LQ_TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
+  let test_bin = exercise.dir.join(format!(".lq_test_{seq}"));
+
+  // Remove any stale binary from a previous run.
   let _ = fs::remove_file(&test_bin);
 
   // --- collect sources ------------------------------------------------
