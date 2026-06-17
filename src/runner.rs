@@ -290,7 +290,7 @@ pub fn rust_run_main(exercise: &Exercise, rust_cfg: &RustConfig) -> String {
 /// Directives parsed from assembly source comment lines.
 struct AsmDirectives {
   /// `; EXPECT_REG: <name> <value>` - register name → expected 32-bit value.
-  expected_regs: Vec<(String, i64)>,
+  expected_regs: Vec<Result<(String, i64), String>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -340,30 +340,45 @@ const ABI_REGISTER_MAP: &[(&str, &str)] = &[
 
 /// Convert a RISC-V ABI register name to its canonical `xN` form.
 ///
-/// If `name` is already an `xN` name or is not a recognised ABI alias, it is
-/// returned unchanged.
-fn abi_to_xreg(name: &str) -> String {
+/// Performs case-insensitive lookup and returns `Ok(xN)` when `name` is a
+/// recognised ABI alias (e.g. `s0`, `a0`) or a canonical `xN` register name
+/// (`x0`..`x31`). Returns `Err` with a descriptive message if the name is
+/// not recognised.
+fn abi_to_xreg(name: &str) -> Result<String, String> {
+  let lower = name.to_lowercase();
+
+  if let Some(rest) = lower.strip_prefix('x')
+    && let Ok(n) = rest.parse::<u8>()
+    && n <= 31
+  {
+    return Ok(format!("x{n}"));
+  }
+
   ABI_REGISTER_MAP
     .iter()
-    .find(|(abi, _)| *abi == name)
-    .map(|(_, xn)| *xn)
-    .unwrap_or(name)
-    .to_string()
+    .find(|(abi, _)| *abi == lower.as_str())
+    .map(|(_, xn)| (*xn).to_string())
+    .ok_or_else(|| format!("Unrecognised register name: '{name}'"))
 }
 
 /// Convert a canonical `xN` register name to its primary ABI alias.
 ///
-/// Returns `None` if `name` has no ABI alias (e.g. `x0` → `Some("zero")`,
-/// an unrecognised name → `None`).  When a register has multiple aliases the
-/// first entry in [`ABI_REGISTER_MAP`] is returned (e.g. `x8` → `"s0"`).
-fn xreg_to_abi(name: &str) -> Option<&'static str> {
-  ABI_REGISTER_MAP.iter().find(|(_, xn)| *xn == name).map(|(abi, _)| *abi)
+/// Performs case-insensitive lookup and returns `Ok(abi_name)` when `name` is
+/// a recognised register (e.g. `x8` → `"s0"`). When a register has multiple
+/// ABI aliases, the first entry in [`ABI_REGISTER_MAP`] is returned.
+/// Returns `Err` with a descriptive message if the name is not recognised.
+fn xreg_to_abi(name: &str) -> Result<&'static str, String> {
+  let lower = name.to_lowercase();
+  ABI_REGISTER_MAP.iter().find(|(_, xn)| *xn == lower.as_str()).map(|(abi, _)| *abi).ok_or_else(|| format!("Unrecognised register name: '{name}'"))
 }
 
 /// Parse a register value that may be decimal (`42`, `-1`) or hexadecimal
 /// (`0xFF`, `0x0000 0001`).  Spaces inside a hex literal are stripped so that
 /// formatted hex like `0x0000 0001` is accepted.
-fn parse_reg_value(s: &str) -> Option<i64> {
+///
+/// Returns `Ok(value)` on successful parse, or `Err(message)` if the input
+/// cannot be parsed as a valid integer.
+fn parse_reg_value(s: &str) -> Result<i64, String> {
   let s = s.trim();
   let lower = s.to_lowercase();
   if lower.starts_with("0x") {
@@ -371,9 +386,9 @@ fn parse_reg_value(s: &str) -> Option<i64> {
     let clean: String = s.chars().filter(|c| !c.is_whitespace()).collect();
     let hex = &clean[2..]; // strip "0x"
     // Parse as u64 first to handle full 32-bit unsigned values, then cast
-    u64::from_str_radix(hex, 16).ok().map(|v| v as i64)
+    u64::from_str_radix(hex, 16).map(|v| v as i64).map_err(|_| format!("Invalid register value: '{s}'"))
   } else {
-    s.parse::<i64>().ok()
+    s.parse::<i64>().map_err(|_| format!("Invalid register value: '{s}'"))
   }
 }
 
@@ -391,7 +406,7 @@ fn parse_reg_value(s: &str) -> Option<i64> {
 /// ; EXPECT_REG: x5  0x0000 0022
 /// ```
 fn parse_asm_directives(source: &str) -> AsmDirectives {
-  let mut expected_regs: Vec<(String, i64)> = Vec::new();
+  let mut expected_regs: Vec<Result<(String, i64), String>> = Vec::new();
 
   for line in source.lines() {
     let trimmed = line.trim();
@@ -411,9 +426,21 @@ fn parse_asm_directives(source: &str) -> AsmDirectives {
           .map(|i| val_raw[..i].trim())
           .or_else(|| val_raw.find(';').map(|i| val_raw[..i].trim()))
           .unwrap_or(val_raw);
-        if let Some(val) = parse_reg_value(val_str) {
+        match parse_reg_value(val_str) {
           // Transform ABI aliases into corresponding xN register names for internal use, since Ripes outputs register values using xN names even when the source uses ABI aliases.
-          expected_regs.push((abi_to_xreg(&reg), val));
+          Ok(val) => {
+            match abi_to_xreg(&reg) {
+              Ok(xreg) => {
+                expected_regs.push(Ok((xreg, val)));
+              }
+              Err(e) => {
+                expected_regs.push(Err(e));
+              }
+            }
+          }
+          Err(e) => {
+            expected_regs.push(Err(format!("Error parsing register value in EXPECT_REG directive: '{reg}' - {e}")));
+          }
         }
       }
     }
@@ -695,14 +722,23 @@ fn verify_riscv(exercise: &Exercise, ripes_cfg: &RipesConfig) -> VerificationRes
   };
 
   // --- check EXPECT_REG directives -----------------------------------
-  let total = directives.expected_regs.len();
+  let mut total: usize = 0;
   let mut satisfied: usize = 0;
   let mut report: Vec<String> = Vec::new();
+  let mut warnings: Vec<String> = Vec::new();
 
-  for (reg, expected) in &directives.expected_regs {
+  for directive in &directives.expected_regs {
+    let (reg, expected) = match directive {
+      Ok(pair) => pair,
+      Err(e) => {
+        warnings.push(format!("  ⚠ {e}"));
+        continue;
+      }
+    };
+    total += 1;
     let reg_label = match xreg_to_abi(reg) {
-      Some(abi) => format!("{reg} ({abi})"),
-      None => reg.clone(),
+      Ok(abi) => format!("{reg} ({abi})"),
+      Err(_) => reg.clone(),
     };
     match registers.get(reg.as_str()) {
       Some(&actual) if regs_equal(actual, *expected) => {
@@ -722,6 +758,11 @@ fn verify_riscv(exercise: &Exercise, ripes_cfg: &RipesConfig) -> VerificationRes
         ));
       }
     }
+  }
+
+  if !warnings.is_empty() {
+    report.push(String::new());
+    report.extend(warnings);
   }
 
   if !stderr.is_empty() {
@@ -1446,7 +1487,7 @@ mod tests {
 addi s2, s0, 1
 ";
     let d = parse_asm_directives(src);
-    assert_eq!(d.expected_regs, vec![("x18".to_string(), 1), ("x19".to_string(), 2),]);
+    assert_eq!(d.expected_regs, vec![Ok(("x18".to_string(), 1)), Ok(("x19".to_string(), 2))]);
   }
 
   #[test]
@@ -1458,7 +1499,7 @@ addi s2, s0, 1
 # EXPECT_REG: x7  42    # t2 = t0 + t1
 ";
     let d = parse_asm_directives(src);
-    assert_eq!(d.expected_regs, vec![("x5".to_string(), 10), ("x6".to_string(), 32), ("x7".to_string(), 42),]);
+    assert_eq!(d.expected_regs, vec![Ok(("x5".to_string(), 10)), Ok(("x6".to_string(), 32)), Ok(("x7".to_string(), 42))]);
   }
 
   #[test]
@@ -1466,7 +1507,7 @@ addi s2, s0, 1
     // Values followed by an inline `; comment` must still parse correctly.
     let src = "; EXPECT_REG: x18 55   ; sum of 1..10\n";
     let d = parse_asm_directives(src);
-    assert_eq!(d.expected_regs, vec![("x18".to_string(), 55)]);
+    assert_eq!(d.expected_regs, vec![Ok(("x18".to_string(), 55))]);
   }
 
   #[test]
@@ -1474,14 +1515,14 @@ addi s2, s0, 1
     // Hex value with inline comment - formatted hex space variant.
     let src = "# EXPECT_REG: x26 0x0000 0022    # 34 decimal\n";
     let d = parse_asm_directives(src);
-    assert_eq!(d.expected_regs, vec![("x26".to_string(), 0x22)]);
+    assert_eq!(d.expected_regs, vec![Ok(("x26".to_string(), 0x22))]);
   }
 
   #[test]
   fn parse_asm_directives_hex_compact() {
     let src = "; EXPECT_REG: x26 0x22\n";
     let d = parse_asm_directives(src);
-    assert_eq!(d.expected_regs, vec![("x26".to_string(), 0x22)]);
+    assert_eq!(d.expected_regs, vec![Ok(("x26".to_string(), 0x22))]);
   }
 
   #[test]
@@ -1489,14 +1530,14 @@ addi s2, s0, 1
     // "0x0000 0001" - formatted hex with an internal space
     let src = "; EXPECT_REG: x18 0x0000 0001\n";
     let d = parse_asm_directives(src);
-    assert_eq!(d.expected_regs, vec![("x18".to_string(), 1)]);
+    assert_eq!(d.expected_regs, vec![Ok(("x18".to_string(), 1))]);
   }
 
   #[test]
   fn parse_asm_directives_negative() {
     let src = "; EXPECT_REG: x5 -1\n";
     let d = parse_asm_directives(src);
-    assert_eq!(d.expected_regs, vec![("x5".to_string(), -1)]);
+    assert_eq!(d.expected_regs, vec![Ok(("x5".to_string(), -1))]);
   }
 
   #[test]
@@ -1504,23 +1545,50 @@ addi s2, s0, 1
     // Due to ripes log output, ABI names must be transformed to corresponding register names internally
     let src = "; EXPECT_REG: s0 -1\n";
     let d = parse_asm_directives(src);
-    assert_eq!(d.expected_regs, vec![("x8".to_string(), -1)]);
+    assert_eq!(d.expected_regs, vec![Ok(("x8".to_string(), -1))]);
+  }
+
+  #[test]
+  fn parse_asm_directives_unknown_register_produces_warning() {
+    // An unrecognised register name should produce an Err entry, not be silently dropped.
+    let src = "; EXPECT_REG: bogus 42\n";
+    let d = parse_asm_directives(src);
+    assert_eq!(d.expected_regs.len(), 1);
+    assert!(matches!(&d.expected_regs[0], Err(msg) if msg.contains("bogus")));
+  }
+
+  #[test]
+  fn abi_to_xreg_is_case_insensitive() {
+    assert_eq!(abi_to_xreg("S0"), Ok("x8".to_string()));
+    assert_eq!(abi_to_xreg("X10"), Ok("x10".to_string()));
+  }
+
+  #[test]
+  fn abi_to_xreg_unknown_returns_none() {
+    assert!(abi_to_xreg("bogus").is_err());
+    assert!(abi_to_xreg("x99").is_err());
+  }
+
+  #[test]
+  fn xreg_to_abi_is_case_insensitive() {
+    assert_eq!(xreg_to_abi("X8"), Ok("s0"));
+    assert_eq!(xreg_to_abi("X31"), Ok("t6"));
   }
 
   #[test]
   fn parse_reg_value_decimal() {
-    assert_eq!(parse_reg_value("42"), Some(42));
-    assert_eq!(parse_reg_value("-1"), Some(-1));
-    assert_eq!(parse_reg_value("0"), Some(0));
+    assert_eq!(parse_reg_value("42"), Ok(42));
+    assert_eq!(parse_reg_value("-1"), Ok(-1));
+    assert_eq!(parse_reg_value("0"), Ok(0));
   }
 
   #[test]
   fn parse_reg_value_hex() {
-    assert_eq!(parse_reg_value("0x0"), Some(0));
-    assert_eq!(parse_reg_value("0xFF"), Some(255));
-    assert_eq!(parse_reg_value("0xFFFFFFFF"), Some(0xFFFF_FFFF_u64 as i64));
-    assert_eq!(parse_reg_value("0x0000 0022"), Some(0x22));
-    assert_eq!(parse_reg_value("0x0000 0001"), Some(1));
+    assert_eq!(parse_reg_value("0x0"), Ok(0));
+    assert_eq!(parse_reg_value("0xFF"), Ok(255));
+    assert_eq!(parse_reg_value("0xFFFFFFFF"), Ok(0xFFFF_FFFF_u64 as i64));
+    assert_eq!(parse_reg_value("0x0000 0022"), Ok(0x22));
+    assert_eq!(parse_reg_value("0x0000 0001"), Ok(1));
   }
 
   #[test]
