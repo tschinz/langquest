@@ -297,8 +297,10 @@ fn render_output(
   last_result: Option<&VerificationResult>,
   scroll_offset: usize,
 ) -> usize {
+  // Available width for hint text: area minus block borders (2) minus 4-space indent
+  let hint_width = area.width.saturating_sub(6) as usize;
   let lines = match last_result {
-    Some(result) => build_output_lines(exercise, hints_revealed, solution_unlock_pending, result),
+    Some(result) => build_output_lines(exercise, hints_revealed, solution_unlock_pending, result, hint_width),
     None => vec![Line::from("No verification result yet. Save your file to trigger verification.")],
   };
 
@@ -340,7 +342,41 @@ fn strip_code_fences(text: &str) -> String {
   lines.join("\n")
 }
 
-fn build_output_lines<'a>(exercise: &'a Exercise, hints_revealed: usize, solution_unlock_pending: bool, result: &'a VerificationResult) -> Vec<Line<'a>> {
+/// Word-wrap a single line at `max_width` characters, returning multiple
+/// lines. This prevents ratatui from wrapping continuation lines without
+/// the proper indent.
+fn wrap_line(text: &str, max_width: usize) -> Vec<String> {
+  if text.len() <= max_width || max_width < 10 {
+    return vec![text.to_string()];
+  }
+  let mut result = Vec::new();
+  let mut remaining = text;
+  while !remaining.is_empty() {
+    if remaining.len() <= max_width {
+      result.push(remaining.to_string());
+      break;
+    }
+    // Find the last whitespace before max_width to break at
+    let break_at = remaining[..max_width].rfind(|c: char| c.is_whitespace()).unwrap_or(max_width);
+    if break_at == 0 {
+      // No whitespace found, hard-break at max_width
+      result.push(remaining[..max_width].to_string());
+      remaining = &remaining[max_width..];
+    } else {
+      result.push(remaining[..break_at].to_string());
+      remaining = remaining[break_at..].trim_start();
+    }
+  }
+  result
+}
+
+fn build_output_lines<'a>(
+  exercise: &'a Exercise,
+  hints_revealed: usize,
+  solution_unlock_pending: bool,
+  result: &'a VerificationResult,
+  hint_width: usize,
+) -> Vec<Line<'a>> {
   let mut lines: Vec<Line<'a>> = Vec::new();
 
   // Progress bar
@@ -387,7 +423,9 @@ fn build_output_lines<'a>(exercise: &'a Exercise, hints_revealed: usize, solutio
       )));
       // Content lines: indented with 4 spaces
       for line_text in hint_text.lines() {
-        lines.push(Line::from(Span::styled(format!("    {}", line_text), Style::default().fg(Color::Yellow))));
+        for wrapped in wrap_line(line_text, hint_width) {
+          lines.push(Line::from(Span::styled(format!("    {}", wrapped), Style::default().fg(Color::Yellow))));
+        }
       }
     }
 

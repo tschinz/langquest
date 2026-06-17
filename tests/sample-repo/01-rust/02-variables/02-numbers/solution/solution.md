@@ -1,9 +1,10 @@
 ---
 title    = "Basic Arithmetic"
 hints    = [
-    "Use `+` for addition and `*` for multiplication",
-    "To compute an average, add both numbers then divide by 2",
-    "Cast to `f64` before dividing to avoid integer truncation",
+    "To build up a total you need to update a value on each iteration. Is a plain `let` binding enough, or do you need something extra?",
+    "Add `mut` to make the binding mutable: `let mut sum = 0.0;`. Then loop over the slice with `for &r in readings` to get each `f64` value.",
+    "```rust\nfn zero_pad(n: u32) -> String {\n    format!(\"...\")\n}\n```",
+    "```rust\nfn zero_pad(n: u32) -> String {\n    format!(\"{n:08}\")\n}\n```",
 ]
 keywords = []
 ---
