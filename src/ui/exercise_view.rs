@@ -380,13 +380,14 @@ fn build_output_lines<'a>(exercise: &'a Exercise, hints_revealed: usize, solutio
     for i in 0..reveal_count {
       let raw_hint = solution_data.hints.get(i).cloned().unwrap_or_default();
       let hint_text = strip_code_fences(&raw_hint);
-      for (j, line_text) in hint_text.lines().enumerate() {
-        let prefix = if j == 0 {
-          format!("[HINT {}/{}] ", i + 1, total_hints)
-        } else {
-          "  ".to_string()
-        };
-        lines.push(Line::from(Span::styled(format!("{}{}", prefix, line_text), Style::default().fg(Color::Yellow))));
+      // Header line: [HINT N/M]
+      lines.push(Line::from(Span::styled(
+        format!("[HINT {}/{}]", i + 1, total_hints),
+        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+      )));
+      // Content lines: indented with 4 spaces
+      for line_text in hint_text.lines() {
+        lines.push(Line::from(Span::styled(format!("    {}", line_text), Style::default().fg(Color::Yellow))));
       }
     }
 
