@@ -1,4 +1,4 @@
-current_exercise = "01-rust/01-hello-world"
+current_exercise = "01-rust/02-variables/02-numbers"
 
 [exercises."01-rust/01-hello-world"]
 best_score = 0.0

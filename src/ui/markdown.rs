@@ -314,6 +314,21 @@ struct Renderer {
   /// Available render width (kept for potential future use).
   #[allow(dead_code)]
   width: u16,
+  // ── Table state ───────────────────────────────────────────────────────
+  /// Whether we are inside a table.
+  in_table: bool,
+  /// Whether the current section is the table head.
+  in_table_head: bool,
+  /// Whether we are inside a table cell (text accumulates in `table_cell`).
+  in_table_cell: bool,
+  /// Text content of the cell currently being parsed.
+  table_cell: String,
+  /// Header cells collected during the `<thead>` section.
+  table_header: Vec<String>,
+  /// Currently accumulating row's cells.
+  table_current_row: Vec<String>,
+  /// All data rows accumulated so far.
+  table_rows: Vec<Vec<String>>,
 }
 
 impl Renderer {
@@ -395,7 +410,9 @@ impl Renderer {
       // ── Text content ──────────────────────────────────────────────────
       Event::Text(text) => {
         let text = text.into_string();
-        if self.in_code_block {
+        if self.in_table_cell {
+          self.table_cell.push_str(&text);
+        } else if self.in_code_block {
           // Accumulate all text chunks - pulldown-cmark may split a
           // code block into multiple Text events (e.g. inside list
           // items).  We render once at End(CodeBlock).
@@ -412,15 +429,23 @@ impl Renderer {
 
       // ── Inline code ───────────────────────────────────────────────────
       Event::Code(code) => {
-        self.current_spans.push(Span::styled(
-          format!("`{}`", code.as_ref()),
-          Style::default().fg(Color::Rgb(255, 165, 0)).add_modifier(Modifier::BOLD),
-        ));
+        if self.in_table_cell {
+          self.table_cell.push_str(&format!("`{}`", code.as_ref()));
+        } else {
+          self.current_spans.push(Span::styled(
+            format!("`{}`", code.as_ref()),
+            Style::default().fg(Color::Rgb(255, 165, 0)).add_modifier(Modifier::BOLD),
+          ));
+        }
       }
 
       // ── Raw HTML (show dimmed; we cannot render it properly) ───────────
       Event::Html(html) | Event::InlineHtml(html) => {
-        self.current_spans.push(Span::styled(html.into_string(), Style::default().fg(Color::DarkGray)));
+        if self.in_table_cell {
+          self.table_cell.push_str(&html);
+        } else {
+          self.current_spans.push(Span::styled(html.into_string(), Style::default().fg(Color::DarkGray)));
+        }
       }
 
       // ── Soft break: flush the current line so the author's line breaks
@@ -428,12 +453,20 @@ impl Renderer {
       // behaviour for a terminal renderer where wrapping is handled by
       // the Paragraph widget, not the content author.
       Event::SoftBreak if !self.in_code_block && !self.current_spans.is_empty() => {
-        self.flush_line();
+        if self.in_table_cell {
+          self.table_cell.push(' ');
+        } else {
+          self.flush_line();
+        }
       }
 
       // ── Hard break: explicit newline ──────────────────────────────────
       Event::HardBreak => {
-        self.flush_line();
+        if self.in_table_cell {
+          self.table_cell.push(' ');
+        } else {
+          self.flush_line();
+        }
       }
 
       // ── Thematic break (---) ──────────────────────────────────────────
@@ -505,6 +538,23 @@ impl Renderer {
         self.start_block();
         self.list_stack.push(first);
         self.item_numbers.push(first.unwrap_or(1));
+      }
+
+      // ── Tables ─────────────────────────────────────────────────────────
+      Tag::Table(_alignments) => {
+        self.start_block();
+        self.in_table = true;
+        self.table_header.clear();
+        self.table_current_row.clear();
+        self.table_rows.clear();
+      }
+      Tag::TableHead => self.in_table_head = true,
+      Tag::TableRow => {
+        self.table_current_row.clear();
+      }
+      Tag::TableCell => {
+        self.table_cell.clear();
+        self.in_table_cell = true;
       }
 
       Tag::Item => {
@@ -601,6 +651,30 @@ impl Renderer {
           self.flush_line();
         }
 
+      // ── Tables ─────────────────────────────────────────────────────────
+      TagEnd::TableCell => {
+        self.in_table_cell = false;
+        let text = std::mem::take(&mut self.table_cell);
+        let trimmed = text.trim().to_string();
+        if self.in_table_head {
+          self.table_header.push(trimmed);
+        } else {
+          self.table_current_row.push(trimmed);
+        }
+      }
+      TagEnd::TableRow => {
+        let row = std::mem::take(&mut self.table_current_row);
+        self.table_rows.push(row);
+      }
+      TagEnd::TableHead => {
+        self.in_table_head = false;
+      }
+      TagEnd::Table => {
+        self.in_table = false;
+        self.render_table();
+        self.pending_blank = true;
+      }
+
       // ── Inline formatting ─────────────────────────────────────────────
       TagEnd::Strong => self.bold = self.bold.saturating_sub(1),
       TagEnd::Emphasis => self.italic = self.italic.saturating_sub(1),
@@ -623,6 +697,117 @@ impl Renderer {
 
       _ => {}
     }
+  }
+
+  // ── Table rendering ───────────────────────────────────────────────────
+
+  /// Render the collected table as formatted text with aligned columns.
+  fn render_table(&mut self) {
+    if self.table_header.is_empty() && self.table_rows.is_empty() {
+      return;
+    }
+
+    // Combine headers and rows to compute column widths.
+    let mut all_rows: Vec<&[String]> = Vec::new();
+    if !self.table_header.is_empty() {
+      all_rows.push(&self.table_header);
+    }
+    for row in &self.table_rows {
+      all_rows.push(row);
+    }
+
+    let num_cols = all_rows.iter().map(|r| r.len()).max().unwrap_or(0);
+    if num_cols == 0 {
+      return;
+    }
+
+    // Pad each row to num_cols with empty strings.
+    let mut padded: Vec<Vec<String>> = Vec::new();
+    if !self.table_header.is_empty() {
+      let mut h = self.table_header.clone();
+      h.resize(num_cols, String::new());
+      padded.push(h);
+    }
+    for row in &self.table_rows {
+      let mut r = row.clone();
+      r.resize(num_cols, String::new());
+      padded.push(r);
+    }
+
+    // Compute max width per column (clamped).
+    let max_col_width = 48usize;
+    let col_widths: Vec<usize> = (0..num_cols)
+      .map(|ci| padded.iter().map(|row| row[ci].chars().count()).max().unwrap_or(0).min(max_col_width))
+      .collect();
+
+    // Compute total width for the separator line.
+    let sep_str = " │ ";
+    let total_width: usize = col_widths.iter().sum::<usize>() + (col_widths.len().saturating_sub(1)) * sep_str.len();
+
+    if !self.table_header.is_empty() {
+      // Header row (bold).
+      self.push_table_row(&padded[0], &col_widths, sep_str, true);
+
+      // Separator row — simple full-width line matching header width.
+      self
+        .lines
+        .push(Line::from(Span::styled("─".repeat(total_width), Style::default().fg(Color::DarkGray))));
+    }
+
+    // Data rows.
+    let start = if self.table_header.is_empty() { 0 } else { 1 };
+    for row in padded.iter().skip(start) {
+      self.push_table_row(row, &col_widths, sep_str, false);
+    }
+  }
+
+  /// Push a single table row as a [`Line`], coloring inline code in orange.
+  fn push_table_row(&mut self, cells: &[String], col_widths: &[usize], sep: &'static str, bold: bool) {
+    let code_style = Style::default().fg(Color::Rgb(255, 165, 0)).add_modifier(Modifier::BOLD);
+    let mut spans = Vec::new();
+    for (ci, cell) in cells.iter().enumerate() {
+      if ci > 0 {
+        spans.push(Span::styled(sep, Style::default().fg(Color::DarkGray)));
+      }
+      let display: String = cell.chars().take(col_widths[ci]).collect();
+      let padded = format!("{:width$}", display, width = col_widths[ci]);
+
+      if bold {
+        // Header row — just bold cyan, no code highlighting.
+        spans.push(Span::styled(padded, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)));
+      } else {
+        // Data row — highlight `code` segments in orange.
+        let mut remaining = padded.as_str();
+        loop {
+          // Find next pair of backticks.
+          let open = match remaining.find('`') {
+            Some(i) => i,
+            None => {
+              spans.push(Span::styled(remaining.to_string(), Style::default()));
+              break;
+            }
+          };
+          let after_open = &remaining[open + 1..];
+          let close = match after_open.find('`') {
+            Some(i) => open + 1 + i,
+            None => {
+              // Unmatched backtick — emit as-is.
+              spans.push(Span::styled(remaining.to_string(), Style::default()));
+              break;
+            }
+          };
+          // Push text before the opening backtick.
+          if open > 0 {
+            spans.push(Span::styled(remaining[..open].to_string(), Style::default()));
+          }
+          // Push the backtick-wrapped segment in code style.
+          let code_segment = &remaining[open..=close];
+          spans.push(Span::styled(code_segment.to_string(), code_style));
+          remaining = &remaining[close + 1..];
+        }
+      }
+    }
+    self.lines.push(Line::from(spans));
   }
 
   // ── Finalise ──────────────────────────────────────────────────────────────
@@ -776,6 +961,93 @@ mod tests {
     let lines = parse_markdown("~~gone~~", 0);
     let span = lines[0].spans.iter().find(|s| s.content.contains("gone")).expect("strikethrough span");
     assert!(span.style.add_modifier.contains(Modifier::CROSSED_OUT));
+  }
+
+  #[test]
+  fn table_with_header_and_rows() {
+    let md = "| Name | Age |\n|------|-----|\n| Alice | 30 |\n| Bob | 25 |";
+    let lines = parse_markdown(md, 0);
+    let texts: Vec<_> = lines.iter().map(text_of).collect();
+    // Should have 4 lines: header, separator, data row 1, data row 2
+    assert!(texts.len() >= 4, "expected at least 4 lines, got {}: {:?}", texts.len(), texts);
+    // Header row should contain column names
+    assert!(texts.iter().any(|t| t.contains("Name")), "header should contain 'Name': {:?}", texts);
+    assert!(texts.iter().any(|t| t.contains("Age")), "header should contain 'Age': {:?}", texts);
+    // Data rows should contain cell values
+    assert!(texts.iter().any(|t| t.contains("Alice")), "data should contain 'Alice': {:?}", texts);
+    assert!(texts.iter().any(|t| t.contains("Bob")), "data should contain 'Bob': {:?}", texts);
+  }
+
+  #[test]
+  fn table_three_columns() {
+    let md = "| Lang | Type  | Memory  |\n|------|-------|---------|\n| Rust | System| Manual  |\n| Go   | System| GC      |\n| Python | Scripting | GC |";
+    let lines = parse_markdown(md, 0);
+    let texts: Vec<_> = lines.iter().map(text_of).collect();
+    // Print output for debugging
+    eprintln!("=== 3-column table output ({:?} lines) ===", texts.len());
+    for (i, t) in texts.iter().enumerate() {
+      eprintln!("  [{i}] \"{t}\"");
+    }
+    eprintln!("=== end ===");
+    // Should have 5 lines: header, separator, 3 data rows
+    // (or possibly more if the table is wrapped)
+    assert!(texts.len() >= 5, "expected at least 5 lines, got {}: {:?}", texts.len(), texts);
+    // Header row
+    assert!(texts.iter().any(|t| t.contains("Lang")), "missing 'Lang': {:?}", texts);
+    assert!(texts.iter().any(|t| t.contains("Type")), "missing 'Type': {:?}", texts);
+    assert!(texts.iter().any(|t| t.contains("Memory")), "missing 'Memory': {:?}", texts);
+    // Data
+    assert!(texts.iter().any(|t| t.contains("Rust")), "missing 'Rust': {:?}", texts);
+    assert!(texts.iter().any(|t| t.contains("Go")), "missing 'Go': {:?}", texts);
+    // All columns for one row should be on the SAME line
+    let rust_row = texts.iter().find(|t| t.contains("Rust")).unwrap();
+    assert!(rust_row.contains("System"), "Rust row missing 'System': '{rust_row}'");
+    assert!(rust_row.contains("Manual"), "Rust row missing 'Manual': '{rust_row}'");
+  }
+
+  #[test]
+  fn table_with_inline_code() {
+    let md = "| Name | Age |\n|------|-----|\n| `Alice` | 30 |\n| `Bob` | 25 |";
+    let lines = parse_markdown(md, 0);
+    let texts: Vec<_> = lines.iter().map(text_of).collect();
+    eprintln!("=== inline-code table output ===");
+    for (i, t) in texts.iter().enumerate() {
+      eprintln!("  [{i}] \"{t}\"");
+    }
+    eprintln!("=== end ===");
+    // Should have 4 lines: header, separator, 2 data rows
+    assert!(texts.len() >= 4, "expected >= 4 lines, got {}: {:?}", texts.len(), texts);
+    // The inline code backticks should be preserved in the output
+    let alice_row = texts.iter().find(|t| t.contains("Alice")).unwrap();
+    assert!(alice_row.contains("`Alice`"), "Alice row should show backticks: '{alice_row}'");
+    assert!(alice_row.contains("30"), "Alice row should contain age: '{alice_row}'");
+  }
+
+  #[test]
+  fn table_numbers_theory() {
+    // Exact content from 01-rust/02-variables/02-numbers/01-theory.md
+    let md = "\
+| Type | Size | Signed? |\n|------|------|---------|\n| `i32` | 32-bit | Yes |\n| `u32` | 32-bit | No |\n| `i64` | 64-bit | Yes |\n| `u64` | 64-bit | No |";
+    let lines = parse_markdown(md, 0);
+    let texts: Vec<_> = lines.iter().map(text_of).collect();
+    eprintln!("=== numbers theory table ===");
+    for (i, t) in texts.iter().enumerate() {
+      eprintln!("  [{i}] \"{t}\"");
+    }
+    eprintln!("=== end ===");
+    // Should have 6 lines: header, separator, 4 data rows
+    assert!(texts.len() >= 6, "expected >= 6 lines, got {}: {:?}", texts.len(), texts);
+    // Header
+    assert!(texts.iter().any(|t| t.contains("Type")), "missing Type");
+    assert!(texts.iter().any(|t| t.contains("Size")), "missing Size");
+    assert!(texts.iter().any(|t| t.contains("Signed?")), "missing Signed?");
+    // Inline code cells should be present
+    assert!(texts.iter().any(|t| t.contains("`i32`")), "missing `i32`");
+    assert!(texts.iter().any(|t| t.contains("`u64`")), "missing `u64`");
+    // All columns of a row should be on the same line
+    let i32_row = texts.iter().find(|t| t.contains("`i32`")).unwrap();
+    assert!(i32_row.contains("32-bit"), "i32 row missing '32-bit': '{i32_row}'");
+    assert!(i32_row.contains("Yes"), "i32 row missing 'Yes': '{i32_row}'");
   }
 }
 
