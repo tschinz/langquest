@@ -314,6 +314,32 @@ fn render_output(
   content_height
 }
 
+/// Strip markdown code-fence lines (```, ```rust, ```python, etc.) from
+/// the start and end of a hint string, since they are useless in plain-text
+/// output and just clutter the display.
+fn strip_code_fences(text: &str) -> String {
+  let mut lines: Vec<&str> = text.lines().collect();
+  // Strip leading fence lines
+  while let Some(first) = lines.first() {
+    let trimmed = first.trim();
+    if trimmed.starts_with("```") {
+      lines.remove(0);
+    } else {
+      break;
+    }
+  }
+  // Strip trailing fence lines
+  while let Some(last) = lines.last() {
+    let trimmed = last.trim();
+    if trimmed.starts_with("```") {
+      lines.pop();
+    } else {
+      break;
+    }
+  }
+  lines.join("\n")
+}
+
 fn build_output_lines<'a>(exercise: &'a Exercise, hints_revealed: usize, solution_unlock_pending: bool, result: &'a VerificationResult) -> Vec<Line<'a>> {
   let mut lines: Vec<Line<'a>> = Vec::new();
 
@@ -350,13 +376,18 @@ fn build_output_lines<'a>(exercise: &'a Exercise, hints_revealed: usize, solutio
     let total_hints = solution_data.hints.len();
     let reveal_count = hints_revealed.min(total_hints);
 
-    // Show regular hints
+    // Show regular hints — split by newlines so code blocks display properly.
     for i in 0..reveal_count {
-      let hint_text = solution_data.hints.get(i).cloned().unwrap_or_default();
-      lines.push(Line::from(Span::styled(
-        format!("[HINT {}/{}] {}", i + 1, total_hints, hint_text),
-        Style::default().fg(Color::Yellow),
-      )));
+      let raw_hint = solution_data.hints.get(i).cloned().unwrap_or_default();
+      let hint_text = strip_code_fences(&raw_hint);
+      for (j, line_text) in hint_text.lines().enumerate() {
+        let prefix = if j == 0 {
+          format!("[HINT {}/{}] ", i + 1, total_hints)
+        } else {
+          "  ".to_string()
+        };
+        lines.push(Line::from(Span::styled(format!("{}{}", prefix, line_text), Style::default().fg(Color::Yellow))));
+      }
     }
 
     if reveal_count < total_hints {
