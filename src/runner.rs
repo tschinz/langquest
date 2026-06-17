@@ -369,7 +369,11 @@ fn abi_to_xreg(name: &str) -> Result<String, String> {
 /// Returns `Err` with a descriptive message if the name is not recognised.
 fn xreg_to_abi(name: &str) -> Result<&'static str, String> {
   let lower = name.to_lowercase();
-  ABI_REGISTER_MAP.iter().find(|(_, xn)| *xn == lower.as_str()).map(|(abi, _)| *abi).ok_or_else(|| format!("Unrecognised register name: '{name}'"))
+  ABI_REGISTER_MAP
+    .iter()
+    .find(|(_, xn)| *xn == lower.as_str())
+    .map(|(abi, _)| *abi)
+    .ok_or_else(|| format!("Unrecognised register name: '{name}'"))
 }
 
 /// Parse a register value that may be decimal (`42`, `-1`) or hexadecimal
@@ -386,7 +390,9 @@ fn parse_reg_value(s: &str) -> Result<i64, String> {
     let clean: String = s.chars().filter(|c| !c.is_whitespace()).collect();
     let hex = &clean[2..]; // strip "0x"
     // Parse as u64 first to handle full 32-bit unsigned values, then cast
-    u64::from_str_radix(hex, 16).map(|v| v as i64).map_err(|_| format!("Invalid register value: '{s}'"))
+    u64::from_str_radix(hex, 16)
+      .map(|v| v as i64)
+      .map_err(|_| format!("Invalid register value: '{s}'"))
   } else {
     s.parse::<i64>().map_err(|_| format!("Invalid register value: '{s}'"))
   }
@@ -428,16 +434,14 @@ fn parse_asm_directives(source: &str) -> AsmDirectives {
           .unwrap_or(val_raw);
         match parse_reg_value(val_str) {
           // Transform ABI aliases into corresponding xN register names for internal use, since Ripes outputs register values using xN names even when the source uses ABI aliases.
-          Ok(val) => {
-            match abi_to_xreg(&reg) {
-              Ok(xreg) => {
-                expected_regs.push(Ok((xreg, val)));
-              }
-              Err(e) => {
-                expected_regs.push(Err(e));
-              }
+          Ok(val) => match abi_to_xreg(&reg) {
+            Ok(xreg) => {
+              expected_regs.push(Ok((xreg, val)));
             }
-          }
+            Err(e) => {
+              expected_regs.push(Err(e));
+            }
+          },
           Err(e) => {
             expected_regs.push(Err(format!("Error parsing register value in EXPECT_REG directive: '{reg}' - {e}")));
           }
@@ -1499,7 +1503,10 @@ addi s2, s0, 1
 # EXPECT_REG: x7  42    # t2 = t0 + t1
 ";
     let d = parse_asm_directives(src);
-    assert_eq!(d.expected_regs, vec![Ok(("x5".to_string(), 10)), Ok(("x6".to_string(), 32)), Ok(("x7".to_string(), 42))]);
+    assert_eq!(
+      d.expected_regs,
+      vec![Ok(("x5".to_string(), 10)), Ok(("x6".to_string(), 32)), Ok(("x7".to_string(), 42))]
+    );
   }
 
   #[test]
