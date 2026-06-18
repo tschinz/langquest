@@ -54,7 +54,7 @@ impl Default for RipesConfig {
   fn default() -> Self {
     Self {
       bin: String::new(),
-      cmd: "ripes --mode cli -t asm --proc RV32_SS --json --cycles --regs --runinfo --timeout 5000 --src <file>".to_string(),
+      cmd: "ripes --mode cli -t asm --proc RV32_SS --json --isaexts M --cycles --regs --runinfo --timeout 5000 --src <file>".to_string(),
     }
   }
 }
