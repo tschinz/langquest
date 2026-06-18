@@ -19,9 +19,12 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Output, Stdio};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use regex::RegexBuilder;
@@ -120,6 +123,62 @@ fn combined_output(output: &std::process::Output) -> String {
   format!("{stdout}{stderr}")
 }
 
+/// Cooperative cancellation token for verification jobs.
+#[derive(Clone)]
+pub struct VerifyCancel {
+  latest_request: Arc<AtomicU64>,
+  request_id: u64,
+}
+
+impl VerifyCancel {
+  /// Create a cancellation token bound to `request_id`.
+  pub fn new(latest_request: Arc<AtomicU64>, request_id: u64) -> Self {
+    Self {
+      latest_request,
+      request_id,
+    }
+  }
+
+  /// Returns true when this request has been superseded.
+  pub fn is_cancelled(&self) -> bool {
+    self.latest_request.load(Ordering::Relaxed) != self.request_id
+  }
+}
+
+enum RunError {
+  Io(std::io::Error),
+  Cancelled,
+}
+
+/// Spawn a child process and capture output while supporting cooperative cancellation.
+fn run_command_cancellable(cmd: &mut Command, cancel: &VerifyCancel) -> Result<Output, RunError> {
+  if cancel.is_cancelled() {
+    return Err(RunError::Cancelled);
+  }
+
+  let mut child = cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(RunError::Io)?;
+
+  loop {
+    if cancel.is_cancelled() {
+      let _ = child.kill();
+      let _ = child.wait();
+      return Err(RunError::Cancelled);
+    }
+
+    match child.try_wait() {
+      Ok(Some(_)) => {
+        return child.wait_with_output().map_err(RunError::Io);
+      }
+      Ok(None) => thread::sleep(Duration::from_millis(25)),
+      Err(e) => {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(RunError::Io(e));
+      }
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Top-level dispatch
 // ---------------------------------------------------------------------------
@@ -128,13 +187,17 @@ fn combined_output(output: &std::process::Output) -> String {
 ///
 /// Never panics.  On any error (compile failure, missing tool, timeout) the
 /// returned result has `score == 0.0` and the error description in `output`.
-pub fn verify(exercise: &Exercise, config: &ProjectConfig) -> VerificationResult {
+pub fn verify(exercise: &Exercise, config: &ProjectConfig, cancel: &VerifyCancel) -> VerificationResult {
+  if cancel.is_cancelled() {
+    return VerificationResult::zero("Verification cancelled.".to_string(), exercise.language.threshold());
+  }
+
   match exercise.language {
-    Language::Rust => verify_rust(exercise, &config.rust),
-    Language::Riscv => verify_riscv(exercise, &config.ripes),
-    Language::Python => verify_python(exercise, &config.python),
-    Language::Go => verify_go(exercise, &config.go),
-    Language::Cpp => verify_cpp(exercise, &config.cpp),
+    Language::Rust => verify_rust(exercise, &config.rust, cancel),
+    Language::Riscv => verify_riscv(exercise, &config.ripes, cancel),
+    Language::Python => verify_python(exercise, &config.python, cancel),
+    Language::Go => verify_go(exercise, &config.go, cancel),
+    Language::Cpp => verify_cpp(exercise, &config.cpp, cancel),
     Language::Text => verify_markdown(exercise),
   }
 }
@@ -170,7 +233,7 @@ fn build_rust_command(cfg: &RustConfig, src_path: &Path, out_path: &Path) -> Res
 /// `test … … ok` and `test … … FAILED` in the test-harness output.
 /// Runs tests with `--nocapture` so `println!` inside test functions
 /// is visible in the output.
-fn verify_rust(exercise: &Exercise, rust_cfg: &RustConfig) -> VerificationResult {
+fn verify_rust(exercise: &Exercise, rust_cfg: &RustConfig, cancel: &VerifyCancel) -> VerificationResult {
   let threshold = exercise.language.threshold();
   let test_bin = exercise.dir.join(".lq_test");
 
@@ -180,12 +243,15 @@ fn verify_rust(exercise: &Exercise, rust_cfg: &RustConfig) -> VerificationResult
     Err(e) => return VerificationResult::zero(e, threshold),
   };
 
-  let compile = Command::new(&compile_bin).args(&compile_args).current_dir(&exercise.dir).output();
-
-  let compile = match compile {
+  let mut compile_cmd = Command::new(&compile_bin);
+  compile_cmd.args(&compile_args).current_dir(&exercise.dir);
+  let compile = match run_command_cancellable(&mut compile_cmd, cancel) {
     Ok(o) => o,
-    Err(e) => {
+    Err(RunError::Io(e)) => {
       return VerificationResult::zero(format!("Failed to run {}: {e}", compile_bin.display()), threshold);
+    }
+    Err(RunError::Cancelled) => {
+      return VerificationResult::zero("Verification cancelled.".to_string(), threshold);
     }
   };
 
@@ -195,15 +261,20 @@ fn verify_rust(exercise: &Exercise, rust_cfg: &RustConfig) -> VerificationResult
   }
 
   // --- run tests (with --nocapture so println! inside tests is visible) -
-  let run = Command::new(&test_bin).arg("--nocapture").current_dir(&exercise.dir).output();
+  let mut run_cmd = Command::new(&test_bin);
+  run_cmd.arg("--nocapture").current_dir(&exercise.dir);
+  let run = run_command_cancellable(&mut run_cmd, cancel);
 
   // best-effort cleanup regardless of run outcome
   let _ = fs::remove_file(&test_bin);
 
   let run = match run {
     Ok(o) => o,
-    Err(e) => {
+    Err(RunError::Io(e)) => {
       return VerificationResult::zero(format!("Failed to execute test binary: {e}"), threshold);
+    }
+    Err(RunError::Cancelled) => {
+      return VerificationResult::zero("Verification cancelled.".to_string(), threshold);
     }
   };
 
@@ -246,7 +317,7 @@ fn verify_rust(exercise: &Exercise, rust_cfg: &RustConfig) -> VerificationResult
 ///
 /// Returns an empty string if the source cannot be compiled as a regular
 /// binary (e.g. it only defines library functions without a `main`).
-pub fn rust_run_main(exercise: &Exercise, rust_cfg: &RustConfig) -> String {
+pub fn rust_run_main(exercise: &Exercise, rust_cfg: &RustConfig, cancel: &VerifyCancel) -> String {
   let test_bin = exercise.dir.join(".lq_test");
   let run_bin = exercise.dir.join(".lq_run");
 
@@ -265,7 +336,9 @@ pub fn rust_run_main(exercise: &Exercise, rust_cfg: &RustConfig) -> String {
     .map(|a| if *a == test_bin_str { run_bin_str.clone() } else { a.clone() })
     .collect();
 
-  let Ok(compile_run) = Command::new(&compile_bin).args(&run_args).current_dir(&exercise.dir).output() else {
+  let mut compile_cmd = Command::new(&compile_bin);
+  compile_cmd.args(&run_args).current_dir(&exercise.dir);
+  let Ok(compile_run) = run_command_cancellable(&mut compile_cmd, cancel) else {
     return String::new();
   };
 
@@ -274,7 +347,9 @@ pub fn rust_run_main(exercise: &Exercise, rust_cfg: &RustConfig) -> String {
     return String::new();
   }
 
-  let output = match Command::new(&run_bin).current_dir(&exercise.dir).output() {
+  let mut run_cmd = Command::new(&run_bin);
+  run_cmd.current_dir(&exercise.dir);
+  let output = match run_command_cancellable(&mut run_cmd, cancel) {
     Ok(o) => combined_output(&o),
     Err(_) => String::new(),
   };
@@ -667,7 +742,7 @@ fn regs_equal(actual: i64, expected: i64) -> bool {
 ///
 /// Score is `satisfied / total_directives`.  If no directives are present the
 /// score is `0.0` and the output explains how to add them.
-fn verify_riscv(exercise: &Exercise, ripes_cfg: &RipesConfig) -> VerificationResult {
+fn verify_riscv(exercise: &Exercise, ripes_cfg: &RipesConfig, cancel: &VerifyCancel) -> VerificationResult {
   let threshold = exercise.language.threshold();
 
   // --- read source for directives ------------------------------------
@@ -699,9 +774,11 @@ fn verify_riscv(exercise: &Exercise, ripes_cfg: &RipesConfig) -> VerificationRes
     Err(e) => return VerificationResult::zero(e, threshold),
   };
 
-  let output = match Command::new(&binary).args(&args).output() {
+  let mut cmd = Command::new(&binary);
+  cmd.args(&args);
+  let output = match run_command_cancellable(&mut cmd, cancel) {
     Ok(o) => o,
-    Err(e) => {
+    Err(RunError::Io(e)) => {
       return VerificationResult::zero(
         format!(
           "Failed to launch Ripes ({}):\n  {e}\n\n\
@@ -716,6 +793,9 @@ fn verify_riscv(exercise: &Exercise, ripes_cfg: &RipesConfig) -> VerificationRes
         ),
         threshold,
       );
+    }
+    Err(RunError::Cancelled) => {
+      return VerificationResult::zero("Verification cancelled.".to_string(), threshold);
     }
   };
 
@@ -835,7 +915,7 @@ fn build_python_command(cfg: &PythonConfig, src_path: &Path) -> Result<(PathBuf,
 ///
 /// Falls back to running the script directly with the configured interpreter
 /// if `pytest` is absent (i.e. "No module named pytest" appears in output).
-fn verify_python(exercise: &Exercise, python_cfg: &PythonConfig) -> VerificationResult {
+fn verify_python(exercise: &Exercise, python_cfg: &PythonConfig, cancel: &VerifyCancel) -> VerificationResult {
   let threshold = exercise.language.threshold();
 
   let (pytest_bin, pytest_args) = match build_python_command(python_cfg, &exercise.source_path) {
@@ -844,7 +924,9 @@ fn verify_python(exercise: &Exercise, python_cfg: &PythonConfig) -> Verification
   };
 
   // Try pytest first ---------------------------------------------------
-  let pytest = Command::new(&pytest_bin).args(&pytest_args).current_dir(&exercise.dir).output();
+  let mut pytest_cmd = Command::new(&pytest_bin);
+  pytest_cmd.args(&pytest_args).current_dir(&exercise.dir);
+  let pytest = run_command_cancellable(&mut pytest_cmd, cancel);
 
   match pytest {
     Ok(output) => {
@@ -852,29 +934,33 @@ fn verify_python(exercise: &Exercise, python_cfg: &PythonConfig) -> Verification
 
       // If pytest module itself is absent, fall back.
       if combined.contains("No module named pytest") {
-        return verify_python_fallback(exercise, &pytest_bin);
+        return verify_python_fallback(exercise, &pytest_bin, cancel);
       }
 
       parse_pytest_output(&combined, threshold)
     }
     // interpreter binary not found at all
-    Err(e) => VerificationResult::zero(format!("Failed to run {}: {e}", pytest_bin.display()), threshold),
+    Err(RunError::Io(e)) => VerificationResult::zero(format!("Failed to run {}: {e}", pytest_bin.display()), threshold),
+    Err(RunError::Cancelled) => VerificationResult::zero("Verification cancelled.".to_string(), threshold),
   }
 }
 
 /// Fallback: run the script directly with the configured interpreter and parse
 /// unittest output.
-fn verify_python_fallback(exercise: &Exercise, python_bin: &Path) -> VerificationResult {
+fn verify_python_fallback(exercise: &Exercise, python_bin: &Path, cancel: &VerifyCancel) -> VerificationResult {
   let threshold = exercise.language.threshold();
 
-  let run = Command::new(python_bin).arg(&exercise.source_path).current_dir(&exercise.dir).output();
+  let mut run_cmd = Command::new(python_bin);
+  run_cmd.arg(&exercise.source_path).current_dir(&exercise.dir);
+  let run = run_command_cancellable(&mut run_cmd, cancel);
 
   match run {
     Ok(output) => {
       let combined = combined_output(&output);
       parse_unittest_output(&combined, threshold)
     }
-    Err(e) => VerificationResult::zero(format!("Failed to run {}: {e}", python_bin.display()), threshold),
+    Err(RunError::Io(e)) => VerificationResult::zero(format!("Failed to run {}: {e}", python_bin.display()), threshold),
+    Err(RunError::Cancelled) => VerificationResult::zero("Verification cancelled.".to_string(), threshold),
   }
 }
 
@@ -900,7 +986,7 @@ fn build_go_command(cfg: &GoConfig) -> Result<(PathBuf, Vec<String>), String> {
 ///
 /// Score is `passed / (passed + failed)` based on `--- PASS:` and
 /// `--- FAIL:` lines in the verbose test output.
-fn verify_go(exercise: &Exercise, go_cfg: &GoConfig) -> VerificationResult {
+fn verify_go(exercise: &Exercise, go_cfg: &GoConfig, cancel: &VerifyCancel) -> VerificationResult {
   let threshold = exercise.language.threshold();
 
   let (go_bin, go_args) = match build_go_command(go_cfg) {
@@ -908,10 +994,12 @@ fn verify_go(exercise: &Exercise, go_cfg: &GoConfig) -> VerificationResult {
     Err(e) => return VerificationResult::zero(e, threshold),
   };
 
-  let output = Command::new(&go_bin).args(&go_args).current_dir(&exercise.dir).output();
+  let mut go_cmd = Command::new(&go_bin);
+  go_cmd.args(&go_args).current_dir(&exercise.dir);
+  let output = run_command_cancellable(&mut go_cmd, cancel);
 
   match output {
-    Err(e) => VerificationResult::zero(
+    Err(RunError::Io(e)) => VerificationResult::zero(
       format!(
         "Failed to run '{}': {e}\n\
                  Make sure Go is installed and available in $PATH.",
@@ -919,6 +1007,7 @@ fn verify_go(exercise: &Exercise, go_cfg: &GoConfig) -> VerificationResult {
       ),
       threshold,
     ),
+    Err(RunError::Cancelled) => VerificationResult::zero("Verification cancelled.".to_string(), threshold),
     Ok(out) => {
       let combined = combined_output(&out);
       parse_go_test_output(&combined, threshold)
@@ -1050,7 +1139,7 @@ fn build_cpp_command(cfg: &CppConfig, sources: &[PathBuf], out_path: &Path) -> R
 /// the resulting test binary.
 ///
 /// Score is `passed / (passed + failed)` based on the Catch2 summary line.
-fn verify_cpp(exercise: &Exercise, cpp_cfg: &CppConfig) -> VerificationResult {
+fn verify_cpp(exercise: &Exercise, cpp_cfg: &CppConfig, cancel: &VerifyCancel) -> VerificationResult {
   let threshold = exercise.language.threshold();
 
   // Use a unique binary name per invocation to avoid "Text file busy"
@@ -1073,11 +1162,11 @@ fn verify_cpp(exercise: &Exercise, cpp_cfg: &CppConfig) -> VerificationResult {
     Err(e) => return VerificationResult::zero(e, threshold),
   };
 
-  let compile = Command::new(&compile_bin).args(&compile_args).current_dir(&exercise.dir).output();
-
-  let compile = match compile {
+  let mut compile_cmd = Command::new(&compile_bin);
+  compile_cmd.args(&compile_args).current_dir(&exercise.dir);
+  let compile = match run_command_cancellable(&mut compile_cmd, cancel) {
     Ok(o) => o,
-    Err(e) => {
+    Err(RunError::Io(e)) => {
       return VerificationResult::zero(
         format!(
           "Failed to run '{}': {e}\n\
@@ -1088,6 +1177,9 @@ fn verify_cpp(exercise: &Exercise, cpp_cfg: &CppConfig) -> VerificationResult {
         threshold,
       );
     }
+    Err(RunError::Cancelled) => {
+      return VerificationResult::zero("Verification cancelled.".to_string(), threshold);
+    }
   };
 
   if !compile.status.success() {
@@ -1096,15 +1188,20 @@ fn verify_cpp(exercise: &Exercise, cpp_cfg: &CppConfig) -> VerificationResult {
   }
 
   // --- run tests ------------------------------------------------------
-  let run = Command::new(&test_bin).current_dir(&exercise.dir).output();
+  let mut run_cmd = Command::new(&test_bin);
+  run_cmd.current_dir(&exercise.dir);
+  let run = run_command_cancellable(&mut run_cmd, cancel);
 
   // best-effort cleanup regardless of run outcome
   let _ = fs::remove_file(&test_bin);
 
   let run = match run {
     Ok(o) => o,
-    Err(e) => {
+    Err(RunError::Io(e)) => {
       return VerificationResult::zero(format!("Failed to execute test binary: {e}"), threshold);
+    }
+    Err(RunError::Cancelled) => {
+      return VerificationResult::zero("Verification cancelled.".to_string(), threshold);
     }
   };
 
