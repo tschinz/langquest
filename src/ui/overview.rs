@@ -86,7 +86,7 @@ pub fn render(
   modules: &[TreeNode],
   exercises: &[Exercise],
   config: &ProjectConfig,
-  overview_cursor: usize,
+  mut overview_cursor: usize,
   collapsed_groups: &HashSet<String>,
 ) -> (usize, Vec<LineKind>) {
   if area.height < 2 || area.width < 10 {
@@ -106,7 +106,8 @@ pub fn render(
   render_progress_bar(frame, progress_area, modules, exercises, config);
 
   // --- full-width tree panel ------------------------------------------
-  render_tree_panel(frame, content_area, modules, exercises, config, overview_cursor, collapsed_groups)
+  let line_kinds = render_tree_panel(frame, content_area, modules, exercises, config, &mut overview_cursor, collapsed_groups);
+  (overview_cursor, line_kinds)
 }
 
 // ---------------------------------------------------------------------------
@@ -191,9 +192,9 @@ fn render_tree_panel(
   nodes: &[TreeNode],
   exercises: &[Exercise],
   config: &ProjectConfig,
-  overview_cursor: usize,
+  overview_cursor: &mut usize,
   collapsed_groups: &HashSet<String>,
-) -> (usize, Vec<LineKind>) {
+) -> Vec<LineKind> {
   // Column widths.
   let lang_width = 12usize;
   let diff_width = 10usize;
@@ -206,7 +207,7 @@ fn render_tree_panel(
   let has_header = topics_width > 4;
 
   // Determine which exercise (if any) is under the cursor tree-line.
-  let selected_path = exercise_path_at_line(nodes, overview_cursor, collapsed_groups, has_header);
+  let selected_path = exercise_path_at_line(nodes, *overview_cursor, collapsed_groups, has_header);
 
   let mut lines: Vec<Line<'_>> = Vec::new();
   let mut line_kinds: Vec<LineKind> = Vec::new();
@@ -265,7 +266,7 @@ fn render_tree_panel(
       // Top-level group header (no connector)
       let is_collapsed = collapsed_groups.contains(&node.path);
       let icon = if is_collapsed { " ▸" } else { " ▾" };
-      let is_cursor_here = lines.len() == overview_cursor;
+      let is_cursor_here = lines.len() == *overview_cursor;
       let style = if is_cursor_here {
         Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
       } else {
@@ -304,21 +305,24 @@ fn render_tree_panel(
     }
   }
 
+  // Clamp cursor in case groups were collapsed/expanded since last frame
+  let max_idx = line_kinds.len().saturating_sub(1);
+  *overview_cursor = (*overview_cursor).min(max_idx);
+
   let block = Block::default()
     .title(" Modules ")
     .borders(Borders::ALL)
     .border_style(Style::default().fg(Color::DarkGray));
 
   let inner_height = block.inner(area).height as usize;
-  let scroll = if overview_cursor >= inner_height {
-    (overview_cursor - inner_height + 1) as u16
-  } else {
-    0
-  };
+  const MARGIN: usize = 3;
+  let max_scroll = lines.len().saturating_sub(inner_height);
+  let target = (*overview_cursor + MARGIN + 1).saturating_sub(inner_height);
+  let scroll = target.min(max_scroll) as u16;
 
   let paragraph = Paragraph::new(lines).block(block).scroll((scroll, 0));
   frame.render_widget(paragraph, area);
-  (line_kinds.len(), line_kinds)
+  line_kinds
 }
 
 /// Recursively render a tree node and its children.
@@ -336,7 +340,7 @@ fn render_tree_node(
   topics_width: usize,
   collapsed_groups: &HashSet<String>,
   exercises: &[Exercise],
-  overview_cursor: usize,
+  overview_cursor: &mut usize,
   line_kinds: &mut Vec<LineKind>,
 ) {
   let connector = if is_last { chars::tree_last() } else { chars::tree_branch() };
@@ -380,7 +384,7 @@ fn render_tree_node(
     // Group header
     let is_collapsed = collapsed_groups.contains(&node.path);
     let icon = if is_collapsed { " ▸" } else { " ▾" };
-    let is_cursor_here = lines.len() == overview_cursor;
+    let is_cursor_here = lines.len() == *overview_cursor;
     let style = if is_cursor_here {
       Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
     } else {
