@@ -600,13 +600,14 @@ fn build_ripes_command(ripes_cfg: &RipesConfig, source_file: &str) -> Result<(Pa
 // Ripes JSON parsing
 // ---------------------------------------------------------------------------
 
-/// Extract the `registers` map from the Ripes JSON output.
+/// Extract the `registers` map and optional `cycles` count from the Ripes
+/// JSON output.
 ///
 /// The expected structure is:
 /// ```json
-/// { "registers": { "x0": 0, "x18": 1, … } }
+/// { "registers": { "x0": 0, "x18": 1, … }, "cycles": 44 }
 /// ```
-fn parse_ripes_registers(json_str: &str) -> Result<HashMap<String, i64>, String> {
+fn parse_ripes_output(json_str: &str) -> Result<(HashMap<String, i64>, Option<u64>), String> {
   // Ripes may print "Program exited with code: N\n" before the JSON object
   // when an exit ecall is executed.  Find the first '{' to skip any such
   // prefix lines.
@@ -629,7 +630,12 @@ fn parse_ripes_registers(json_str: &str) -> Result<HashMap<String, i64>, String>
       map.insert(k.clone(), n as i64);
     }
   }
-  Ok(map)
+
+  // Ripes may include a top-level "cycles" field with the number of
+  // simulation cycles used.
+  let cycles = root.get("cycles").and_then(|v| v.as_u64());
+
+  Ok((map, cycles))
 }
 
 // ---------------------------------------------------------------------------
@@ -714,9 +720,9 @@ fn verify_riscv(exercise: &Exercise, ripes_cfg: &RipesConfig) -> VerificationRes
     return VerificationResult::zero(format!("Ripes exited with an error:\n{}", cap_output(&combined, MAX_OUTPUT_LINES)), threshold);
   }
 
-  // --- parse registers from JSON -------------------------------------
-  let registers = match parse_ripes_registers(&stdout) {
-    Ok(r) => r,
+  // --- parse registers (+ cycles) from JSON --------------------------
+  let (registers, cycles) = match parse_ripes_output(&stdout) {
+    Ok(parsed) => parsed,
     Err(e) => {
       return VerificationResult::zero(
         format!("Could not parse Ripes output: {e}\n\nRaw output (first 50 lines):\n{}", cap_output(&stdout, 50)),
@@ -730,6 +736,11 @@ fn verify_riscv(exercise: &Exercise, ripes_cfg: &RipesConfig) -> VerificationRes
   let mut satisfied: usize = 0;
   let mut report: Vec<String> = Vec::new();
   let mut warnings: Vec<String> = Vec::new();
+
+  if let Some(c) = cycles {
+    report.push(format!("Cycles: {c}"));
+    report.push(String::new());
+  }
 
   for directive in &directives.expected_regs {
     let (reg, expected) = match directive {
