@@ -741,7 +741,6 @@ fn verify_riscv(exercise: &Exercise, ripes_cfg: &RipesConfig) -> VerificationRes
     report.push(format!("Cycles: {c}"));
     report.push(String::new());
   } else {
-    
     report.push(format!("Cycles count not found in Ripes output."));
     report.push(String::new());
   }
