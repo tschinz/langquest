@@ -142,6 +142,8 @@ pub struct App {
   pub needs_redraw: bool,
   /// Last terminal width to detect resize.
   last_width: u16,
+  /// Whether verification is queued/running for the current exercise.
+  pub verifying: bool,
 }
 
 impl App {
@@ -191,6 +193,7 @@ impl App {
       render_cache: RenderCache::new(),
       needs_redraw: true,
       last_width: 0,
+      verifying: false,
     };
 
     // Pre-initialise hints_max for exercises with solution data so the TOML
@@ -256,7 +259,7 @@ impl App {
     self.page = ExercisePage::Theory;
     self.scroll_offset = 0;
     self.setup_watcher();
-    self.run_verify();
+    self.queue_verify();
     self.save_config();
   }
 
@@ -294,6 +297,12 @@ impl App {
     if exercise.language == crate::exercise::Language::Rust {
       self.last_main_output = runner::rust_run_main(&exercise, &self.config.rust);
     }
+  }
+
+  /// Queue verification so the UI can render a "running" status first.
+  fn queue_verify(&mut self) {
+    self.verifying = true;
+    self.needs_redraw = true;
   }
 
   /// The main TUI event loop.
@@ -357,6 +366,13 @@ impl App {
         }
       }
 
+      if self.verifying {
+        self.verifying = false;
+        self.run_verify();
+        self.save_config();
+        self.needs_redraw = true;
+      }
+
       // Check for file-change events from the watcher.
       if let Some(ref watcher) = self.watcher {
         // Drain all pending events.
@@ -369,9 +385,7 @@ impl App {
           // the modified source file instead of serving stale cached lines.
           let exercise_path = self.current_exercise().relative_path.clone();
           self.render_cache.invalidate_exercise(&exercise_path);
-          self.run_verify();
-          self.save_config();
-          self.needs_redraw = true;
+          self.queue_verify();
         }
       }
 
