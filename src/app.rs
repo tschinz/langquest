@@ -1,11 +1,12 @@
 //! Top-level application state and TUI event loop.
 
+use std::collections::HashSet;
 use std::io::BufWriter;
 use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::{Result, bail};
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEventKind};
 use ratatui::prelude::*;
 
 use crate::config::{self, ProjectConfig};
@@ -14,6 +15,17 @@ use crate::runner::{self, ExerciseWatcher, VerificationResult};
 use crate::ui;
 use crate::ui::cache::RenderCache;
 use crate::ui::markdown::PendingOsc8;
+
+/// What a tree line represents — used to map cursor position to action.
+#[derive(Debug, Clone)]
+pub enum LineKind {
+  /// An exercise line, with its index in the flat exercises list.
+  Exercise(usize),
+  /// A group-header line, with the group's relative path.
+  Group(String),
+  /// A separator / blank line.
+  Blank,
+}
 
 /// Which top-level view is active.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -104,10 +116,13 @@ pub struct App {
   /// regular binary. Displayed in the "Debug" page. Empty when the source
   /// doesn't have a `fn main` or can't be compiled as a regular binary.
   pub last_main_output: String,
-  /// Cursor position in the Overview table.
+  /// Cursor position in the Overview table (tree line index).
   pub overview_cursor: usize,
-  /// Whether the tree panel is visible in the Overview.
-  pub show_tree: bool,
+  /// For each tree line, what it represents (exercise, group, or blank).
+  /// Used by `handle_enter` to know whether to open an exercise or toggle a group.
+  pub tree_line_kinds: Vec<LineKind>,
+  /// Groups (by relative path) whose children are hidden in the tree.
+  pub collapsed_groups: HashSet<String>,
   /// Whether the bottom status bar is expanded.
   pub show_menu: bool,
   /// Vertical scroll offset for markdown/text content.
@@ -163,8 +178,9 @@ impl App {
       hints_revealed: 0,
       last_result: None,
       last_main_output: String::new(),
-      overview_cursor: current_index,
-      show_tree: true,
+      overview_cursor: 1,
+      tree_line_kinds: Vec::new(),
+      collapsed_groups: HashSet::new(),
       show_menu: true,
       scroll_offset: 0,
       content_height: 0,
@@ -275,9 +291,13 @@ impl App {
   /// Returns an error if terminal setup/teardown fails or on unrecoverable
   /// I/O errors.
   pub fn run(&mut self) -> Result<()> {
-    // Enter alternate screen and enable raw mode.
+    // Enter alternate screen, enable raw mode, and capture mouse events.
     crossterm::terminal::enable_raw_mode()?;
-    crossterm::execute!(std::io::stderr(), crossterm::terminal::EnterAlternateScreen)?;
+    crossterm::execute!(
+      std::io::stderr(),
+      crossterm::terminal::EnterAlternateScreen,
+      crossterm::event::EnableMouseCapture,
+    )?;
 
     let backend = CrosstermBackend::new(BufWriter::new(std::io::stderr()));
     let mut terminal = Terminal::new(backend)?;
@@ -286,7 +306,11 @@ impl App {
 
     // Always restore terminal state, even on error.
     let _ = crossterm::terminal::disable_raw_mode();
-    let _ = crossterm::execute!(std::io::stderr(), crossterm::terminal::LeaveAlternateScreen);
+    let _ = crossterm::execute!(
+      std::io::stderr(),
+      crossterm::terminal::LeaveAlternateScreen,
+      crossterm::event::DisableMouseCapture,
+    );
 
     result
   }
@@ -341,25 +365,33 @@ impl App {
 
       // Poll for crossterm events with a 200ms timeout.
       if event::poll(Duration::from_millis(200))? {
-        if let Event::Key(key) = event::read()?
-          && key.kind == KeyEventKind::Press
-          && self.handle_key(key)
-        {
-          // Quit requested.
-          self.save_config();
-          return Ok(());
+        match event::read()? {
+          Event::Key(key) if key.kind == KeyEventKind::Press && self.handle_key(key) => {
+            // Quit requested.
+            self.save_config();
+            return Ok(());
+          }
+          Event::Mouse(mouse) => {
+            self.handle_mouse(mouse);
+          }
+          _ => {}
         }
 
         // Drain any additional events that arrived while we were handling the
         // first one.  This batches rapid scroll / navigation input so we only
         // render once at the final position instead of once per keypress.
         while event::poll(Duration::from_millis(0))? {
-          if let Event::Key(key) = event::read()?
-            && key.kind == KeyEventKind::Press
-            && self.handle_key(key)
-          {
-            self.save_config();
-            return Ok(());
+          match event::read()? {
+            Event::Key(key) if key.kind == KeyEventKind::Press && self.handle_key(key) => {
+              self.save_config();
+              return Ok(());
+            }
+            Event::Mouse(_) => {
+              // Skip mouse events in the drain loop — they arrive in
+              // bursts and processing them all would cause multi-line
+              // jumps per scroll tick.
+            }
+            _ => {}
           }
         }
       }
@@ -407,7 +439,7 @@ impl App {
         // 'o' only works from ExerciseView to go to Overview
         if self.view == View::ExerciseView {
           self.view = View::Overview;
-          self.overview_cursor = self.current_index;
+          self.overview_cursor = 0;
           self.scroll_offset = 0;
           self.needs_redraw = true;
         }
@@ -453,17 +485,17 @@ impl App {
         self.needs_redraw = true;
         false
       }
-      KeyCode::Char('t') => {
-        self.handle_toggle_tree();
-        self.needs_redraw = true;
-        false
-      }
       KeyCode::Char('e') => {
         self.open_in_editor();
         false
       }
       KeyCode::Char('a') => {
         self.handle_about();
+        self.needs_redraw = true;
+        false
+      }
+      KeyCode::Char('z') => {
+        self.toggle_collapse_all();
         self.needs_redraw = true;
         false
       }
@@ -533,7 +565,7 @@ impl App {
     match self.view {
       View::ExerciseView => {
         self.view = View::Overview;
-        self.overview_cursor = self.current_index;
+        self.overview_cursor = 0;
         self.scroll_offset = 0;
       }
       View::Overview => {
@@ -639,11 +671,31 @@ impl App {
     self.scroll_offset = target.saturating_sub(2);
   }
 
+  /// Handle mouse events (scrolling).
+  fn handle_mouse(&mut self, mouse: crossterm::event::MouseEvent) {
+    match mouse.kind {
+      MouseEventKind::ScrollDown => {
+        self.handle_scroll_down();
+        self.needs_redraw = true;
+      }
+      MouseEventKind::ScrollUp => {
+        self.handle_scroll_up();
+        self.needs_redraw = true;
+      }
+      _ => {}
+    }
+  }
+
   /// Scroll up in the current view.
   fn handle_scroll_up(&mut self) {
     if self.view == View::Overview {
       if self.overview_cursor > 0 {
         self.overview_cursor -= 1;
+        // Skip blank separator lines so the cursor lands on the nearest
+        // group header or exercise.
+        while self.overview_cursor > 0 && self.tree_line_kinds.get(self.overview_cursor).is_some_and(|k| matches!(k, LineKind::Blank)) {
+          self.overview_cursor -= 1;
+        }
       }
     } else {
       self.scroll_offset = self.scroll_offset.saturating_sub(1);
@@ -653,12 +705,15 @@ impl App {
   /// Scroll down in the current view.
   fn handle_scroll_down(&mut self) {
     if self.view == View::Overview {
-      let max = self.exercises.len().saturating_sub(1);
+      let max = self.content_height.saturating_sub(1);
       if self.overview_cursor < max {
         self.overview_cursor += 1;
+        // Skip blank separator lines.
+        while self.overview_cursor < max && self.tree_line_kinds.get(self.overview_cursor).is_some_and(|k| matches!(k, LineKind::Blank)) {
+          self.overview_cursor += 1;
+        }
       }
     } else {
-      // Limit scroll so last line can reach top of viewport
       let max_scroll = self.content_height.saturating_sub(1);
       if self.scroll_offset < max_scroll {
         self.scroll_offset = self.scroll_offset.saturating_add(1);
@@ -678,31 +733,57 @@ impl App {
   /// Page down - scroll content down by a larger amount.
   fn handle_page_down(&mut self) {
     if self.view == View::Overview {
-      let max = self.exercises.len().saturating_sub(1);
+      let max = self.content_height.saturating_sub(1);
       self.overview_cursor = (self.overview_cursor + 10).min(max);
     } else {
-      // Limit scroll so last line can reach top of viewport
       let max_scroll = self.content_height.saturating_sub(1);
       self.scroll_offset = (self.scroll_offset + 10).min(max_scroll);
     }
   }
 
   /// In Overview, jump to the exercise at the cursor and switch to
-  /// ExerciseView.
+  /// ExerciseView, or toggle a group if the cursor is on a header.
   fn handle_enter(&mut self) {
     if self.view != View::Overview {
       return;
     }
-    if self.overview_cursor < self.exercises.len() {
-      self.switch_exercise(self.overview_cursor);
-      self.view = View::ExerciseView;
+    match self.tree_line_kinds.get(self.overview_cursor) {
+      Some(LineKind::Exercise(ex_idx)) => {
+        self.switch_exercise(*ex_idx);
+        self.view = View::ExerciseView;
+      }
+      Some(LineKind::Group(path)) => {
+        if !self.collapsed_groups.insert(path.clone()) {
+          self.collapsed_groups.remove(path);
+        }
+        self.needs_redraw = true;
+      }
+      _ => {} // Blank lines — do nothing
     }
   }
 
-  /// Toggle the tree panel (only in Overview view).
-  fn handle_toggle_tree(&mut self) {
-    if self.view == View::Overview {
-      self.show_tree = !self.show_tree;
+  /// Collect all group paths from the tree recursively.
+  fn collect_group_paths(&self, nodes: &[TreeNode]) -> HashSet<String> {
+    let mut paths = HashSet::new();
+    for node in nodes {
+      if node.exercise.is_none() {
+        paths.insert(node.path.clone());
+        paths.extend(self.collect_group_paths(&node.children));
+      }
+    }
+    paths
+  }
+
+  /// Toggle all groups between collapsed and expanded.
+  /// Works from both Overview and ExerciseView.
+  fn toggle_collapse_all(&mut self) {
+    let all_groups = self.collect_group_paths(&self.tree);
+    if self.collapsed_groups.len() == all_groups.len() {
+      // All collapsed → expand all
+      self.collapsed_groups.clear();
+    } else {
+      // Some or none collapsed → collapse all
+      self.collapsed_groups = all_groups;
     }
   }
 
@@ -780,17 +861,23 @@ impl App {
       View::ExerciseView => ui::exercise_view::render(self, frame, content_area),
       View::Overview => {
         // Overview uses overview_cursor for navigation, not scroll_offset
-        self.content_height = self.exercises.len();
-        self.viewport_height = content_area.height as usize;
-        ui::overview::render(
+        let (_tree_line_count, line_kinds) = ui::overview::render(
           frame,
           content_area,
           &self.tree,
           &self.exercises,
           &self.config,
           self.overview_cursor,
-          self.show_tree,
+          &self.collapsed_groups,
         );
+        // Cap cursor to the last non-blank line so trailing separator
+        // lines aren't selectable, and clamp it in case collapsing/
+        // expanding the tree changed the number of selectable lines.
+        let last_non_blank = line_kinds.iter().rposition(|k| !matches!(k, LineKind::Blank));
+        self.content_height = last_non_blank.map_or(0, |i| i + 1);
+        self.overview_cursor = self.overview_cursor.min(self.content_height.saturating_sub(1));
+        self.tree_line_kinds = line_kinds;
+        self.viewport_height = content_area.height as usize;
         None
       }
       View::About => {
@@ -808,7 +895,7 @@ impl App {
     };
 
     if self.show_menu {
-      ui::statusbar::render(frame, bar_area, self.view, self.page, self.show_tree, solution_accessible);
+      ui::statusbar::render(frame, bar_area, self.view, self.page, solution_accessible);
     } else {
       ui::statusbar::render_collapsed(frame, bar_area);
     }

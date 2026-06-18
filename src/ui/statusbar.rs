@@ -54,7 +54,7 @@ const SEP_FG: Color = Color::Rgb(55, 55, 72);
 ///
 /// `area` must be at least 2 lines tall; if it is only 1 line the collapsed
 /// bar is rendered instead.
-pub fn render(frame: &mut Frame, area: Rect, view: View, page: ExercisePage, show_tree: bool, solution_accessible: bool) {
+pub fn render(frame: &mut Frame, area: Rect, view: View, page: ExercisePage, solution_accessible: bool) {
   if area.height < EXPANDED_HEIGHT {
     render_collapsed(frame, area);
     return;
@@ -65,7 +65,7 @@ pub fn render(frame: &mut Frame, area: Rect, view: View, page: ExercisePage, sho
     .constraints([Constraint::Length(1), Constraint::Length(1)])
     .split(area);
 
-  render_tabs_row(frame, rows[0], view, page, show_tree, solution_accessible);
+  render_tabs_row(frame, rows[0], view, page, solution_accessible);
   render_hints_row(frame, rows[1], view);
 }
 
@@ -80,7 +80,7 @@ pub fn render_collapsed(frame: &mut Frame, area: Rect) {
 
 // ── Row 1: view + sub-view tabs ───────────────────────────────────────────────
 
-fn render_tabs_row(frame: &mut Frame, area: Rect, view: View, page: ExercisePage, show_tree: bool, solution_accessible: bool) {
+fn render_tabs_row(frame: &mut Frame, area: Rect, view: View, page: ExercisePage, solution_accessible: bool) {
   // Use term_caps for cross-platform separator characters
   let use_unicode = chars::vertical() == "│";
   let slash_sep: &'static str = if use_unicode { "  ╱  " } else { "  /  " };
@@ -130,9 +130,7 @@ fn render_tabs_row(frame: &mut Frame, area: Rect, view: View, page: ExercisePage
     }
 
     View::Overview => {
-      spans.push(sub_tab("Table", !show_tree));
-      spans.push(dim_sep("  ·  "));
-      spans.push(sub_tab("Tree", show_tree));
+      // No sub-tabs needed for Overview — the module tree is always shown.
     }
 
     View::About => {}
@@ -167,7 +165,7 @@ fn render_hints_row(frame: &mut Frame, area: Rect, view: View) {
     View::Overview => vec![
       (up_down, "navigate"),
       ("Enter", "open"),
-      ("t", "tree"),
+      ("z", "collapse"),
       ("a", "about"),
       ("q", "quit"),
       ("m", "menu"),
@@ -205,7 +203,7 @@ fn top_tab(label: &'static str, active: bool) -> Span<'static> {
   }
 }
 
-/// Sub-view tab (Theory/Task/Output/Solution or Table/Tree).
+/// Sub-view tab (Theory/Task/Output/Solution).
 fn sub_tab(label: &'static str, active: bool) -> Span<'static> {
   if active {
     Span::styled(label, Style::default().fg(ACTIVE_FG).add_modifier(Modifier::BOLD | Modifier::UNDERLINED))

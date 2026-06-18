@@ -1,17 +1,18 @@
-//! Overview - progress bar, exercise table, tree panel.
+//! Overview - progress bar, exercise tree panel.
 //!
 //! Renders the main overview screen consisting of:
 //! * A progress bar showing completed / total exercises.
-//! * A scrollable exercise table (delegated to [`super::table`]).
-//! * An optional tree panel showing the module/exercise hierarchy.
-//! * A status bar with keybinding hints.
+//! * A scrollable tree panel showing the module/exercise hierarchy
+//!   with Language, Difficulty and Topics inline on each exercise.
 
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 
-use super::table::{self, Column, TableData};
+use std::collections::HashSet;
+
 use super::term_caps::chars;
+use crate::app::LineKind;
 use crate::config::ProjectConfig;
 use crate::exercise::{Exercise, ExerciseStatus, TreeNode};
 
@@ -34,27 +35,68 @@ pub fn derive_status(state: &crate::config::ExerciseState) -> ExerciseStatus {
   }
 }
 
+/// Compute the aggregate [`ExerciseStatus`] for all exercises under `node`.
+fn group_status(node: &TreeNode, config: &ProjectConfig) -> ExerciseStatus {
+  let mut total = 0usize;
+  let mut passed = 0usize;
+  let mut seen = 0usize;
+  count_group_exercises(node, config, &mut total, &mut passed, &mut seen);
+  if total == 0 {
+    return ExerciseStatus::Failing;
+  }
+  if seen == total {
+    ExerciseStatus::Complete
+  } else if passed > 0 {
+    ExerciseStatus::Partial
+  } else {
+    ExerciseStatus::Failing
+  }
+}
+
+/// Recursively count exercises and their states under `node`.
+fn count_group_exercises(node: &TreeNode, config: &ProjectConfig, total: &mut usize, passed: &mut usize, seen: &mut usize) {
+  for child in &node.children {
+    if let Some(ex) = &child.exercise {
+      *total += 1;
+      let state = config.get_state(&ex.relative_path);
+      if state.passed {
+        *passed += 1;
+      }
+      if state.solution_seen {
+        *seen += 1;
+      }
+    } else {
+      count_group_exercises(child, config, total, passed, seen);
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Public render entry-point
 // ---------------------------------------------------------------------------
 
 /// Render the full Overview screen.
 ///
-/// `modules` is the tree of groups and exercises (for the tree panel).
-/// `exercises` is a flat list of all exercises (for the table and cursor).
+/// `modules` is the tree of groups and exercises.
+/// `exercises` is the flat exercise list (for cursor navigation).
 #[allow(clippy::too_many_arguments)]
-pub fn render(frame: &mut Frame, area: Rect, modules: &[TreeNode], exercises: &[Exercise], config: &ProjectConfig, overview_cursor: usize, show_tree: bool) {
+pub fn render(
+  frame: &mut Frame,
+  area: Rect,
+  modules: &[TreeNode],
+  exercises: &[Exercise],
+  config: &ProjectConfig,
+  overview_cursor: usize,
+  collapsed_groups: &HashSet<String>,
+) -> (usize, Vec<LineKind>) {
   if area.height < 2 || area.width < 10 {
-    return;
+    return (0, Vec::new());
   }
 
-  // Split into progress bar (3 lines) + table/tree region.
+  // Split into progress bar (3 lines) + tree region.
   let vertical = Layout::default()
     .direction(Direction::Vertical)
-    .constraints([
-      Constraint::Length(3), // progress bar
-      Constraint::Min(1),    // exercise table (+ optional tree)
-    ])
+    .constraints([Constraint::Length(3), Constraint::Min(1)])
     .split(area);
 
   let progress_area = vertical[0];
@@ -63,22 +105,8 @@ pub fn render(frame: &mut Frame, area: Rect, modules: &[TreeNode], exercises: &[
   // --- progress bar ---------------------------------------------------
   render_progress_bar(frame, progress_area, modules, exercises, config);
 
-  // --- table + optional tree ------------------------------------------
-  // The tree is a side panel - hide it only when the terminal is too narrow
-  // to split meaningfully (< 80 columns), not based on height.
-  let tree_visible = show_tree && area.width >= 80;
-
-  if tree_visible {
-    let horizontal = Layout::default()
-      .direction(Direction::Horizontal)
-      .constraints([Constraint::Percentage(65), Constraint::Percentage(35)])
-      .split(content_area);
-
-    render_exercise_table(frame, horizontal[0], modules, exercises, config, overview_cursor);
-    render_tree_panel(frame, horizontal[1], modules, exercises, config, overview_cursor);
-  } else {
-    render_exercise_table(frame, content_area, modules, exercises, config, overview_cursor);
-  }
+  // --- full-width tree panel ------------------------------------------
+  render_tree_panel(frame, content_area, modules, exercises, config, overview_cursor, collapsed_groups)
 }
 
 // ---------------------------------------------------------------------------
@@ -118,89 +146,94 @@ fn render_progress_bar(frame: &mut Frame, area: Rect, _modules: &[TreeNode], exe
 }
 
 // ---------------------------------------------------------------------------
-// Exercise table
-// ---------------------------------------------------------------------------
-
-fn render_exercise_table(frame: &mut Frame, area: Rect, _modules: &[TreeNode], exercises: &[Exercise], config: &ProjectConfig, overview_cursor: usize) {
-  let columns = vec![
-    Column {
-      header: "ID".to_string(),
-      width: 20,
-    },
-    Column {
-      header: "Name".to_string(),
-      width: 30,
-    },
-    Column {
-      header: "Language".to_string(),
-      width: 12,
-    },
-    Column {
-      header: "Difficulty".to_string(),
-      width: 10,
-    },
-    Column {
-      header: "Status".to_string(),
-      width: 12,
-    },
-    Column {
-      header: "Topics".to_string(),
-      width: 30,
-    },
-  ];
-
-  let rows: Vec<Vec<String>> = exercises
-    .iter()
-    .map(|ex| {
-      let state = config.get_state(&ex.relative_path);
-      let status = derive_status(&state);
-      let stars = "*".repeat(ex.difficulty as usize);
-      let status_str = format!("{} {}", status.symbol(), status.label());
-      let topics_str = ex.topics.join(", ");
-      vec![
-        ex.id.clone(),
-        ex.name.clone(),
-        ex.language.display_name().to_string(),
-        stars,
-        status_str,
-        topics_str,
-      ]
-    })
-    .collect();
-
-  let data = TableData { columns, rows };
-
-  let header_style = Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD);
-  let highlight_style = Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD);
-
-  let block = Block::default()
-    .title(" Exercises ")
-    .borders(Borders::ALL)
-    .border_style(Style::default().fg(Color::DarkGray));
-
-  let inner = block.inner(area);
-  frame.render_widget(block, area);
-
-  table::render_table(frame, inner, &data, overview_cursor, header_style, highlight_style);
-}
-
-// ---------------------------------------------------------------------------
 // Tree panel
 // ---------------------------------------------------------------------------
 
-fn render_tree_panel(frame: &mut Frame, area: Rect, nodes: &[TreeNode], exercises: &[Exercise], config: &ProjectConfig, overview_cursor: usize) {
-  let selected_path = exercises.get(overview_cursor).map(|ex| ex.relative_path.as_str());
+/// Approximate visual width of a string in terminal columns.
+/// Works correctly for ASCII (1 byte = 1 column) and box-drawing Unicode
+/// (multi-byte but 1 column). May be inaccurate for CJK/emoji (unlikely
+/// in exercise names).
+fn visual_width(s: &str) -> usize {
+  s.chars().count()
+}
+
+/// Format an exercise line with the tree on the left (padded to a fixed
+/// width) and aligned metadata columns (Language, Difficulty, Topics)
+/// on the right.
+#[allow(clippy::too_many_arguments)]
+fn build_exercise_line(
+  prefix: &str,
+  connector: &str,
+  ex: &Exercise,
+  symbol: &str,
+  stars: &str,
+  topics: &str,
+  tree_width: usize,
+  lang_width: usize,
+  diff_width: usize,
+  topics_width: usize,
+) -> String {
+  let tree_part = format!("{}{} {} {}", prefix, connector, symbol, ex.name);
+  // Pad by visual width (not byte length) since box-drawing chars are
+  // multi-byte but single-column in the terminal.
+  let tree_visual = visual_width(&tree_part);
+  let padding = tree_width.saturating_sub(tree_visual);
+  let tree_padded = format!("{}{}", tree_part, " ".repeat(padding));
+  let lang_padded = format!("{:<width$}", ex.language.display_name(), width = lang_width);
+  let diff_padded = format!("{:<width$}", stars, width = diff_width);
+  let topics_truncated: String = topics.chars().take(topics_width).collect();
+  format!("{}   {}   {}   {}", tree_padded, lang_padded, diff_padded, topics_truncated)
+}
+
+fn render_tree_panel(
+  frame: &mut Frame,
+  area: Rect,
+  nodes: &[TreeNode],
+  exercises: &[Exercise],
+  config: &ProjectConfig,
+  overview_cursor: usize,
+  collapsed_groups: &HashSet<String>,
+) -> (usize, Vec<LineKind>) {
+  // Column widths.
+  let lang_width = 12usize;
+  let diff_width = 10usize;
+  let tree_width = 44usize;
+  let block_inner = (area.width.saturating_sub(2)) as usize;
+  // Separators: tree|lang + lang|diff + diff|topics = 3 each
+  let sep_total = 3 + 3 + 3;
+  let topics_width = block_inner.saturating_sub(tree_width + lang_width + diff_width + sep_total);
+
+  let has_header = topics_width > 4;
+
+  // Determine which exercise (if any) is under the cursor tree-line.
+  let selected_path = exercise_path_at_line(nodes, overview_cursor, collapsed_groups, has_header);
 
   let mut lines: Vec<Line<'_>> = Vec::new();
+  let mut line_kinds: Vec<LineKind> = Vec::new();
+
+  // Column headers.
+  if topics_width > 4 {
+    let lang_padded = format!("{:<width$}", "Language", width = lang_width);
+    let diff_padded = format!("{:<width$}", "Difficulty", width = diff_width);
+    let hdr = format!(
+      "{:tree_width$}   {}   {}   Topics",
+      "Exercise",
+      lang_padded,
+      diff_padded,
+      tree_width = tree_width,
+    );
+    lines.push(Line::from(Span::styled(hdr, Style::default().fg(Color::DarkGray))));
+    line_kinds.push(LineKind::Blank);
+  }
 
   for node in nodes {
     if let Some(ex) = &node.exercise {
       // Top-level exercise (unusual but handle gracefully)
       let state = config.get_state(&ex.relative_path);
       let status = derive_status(&state);
-      let is_selected = selected_path == Some(ex.relative_path.as_str());
+      let is_selected = selected_path.as_deref() == Some(ex.relative_path.as_str());
       let style = if is_selected {
-        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+        Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
       } else {
         match status {
           ExerciseStatus::Complete => Style::default().fg(Color::Green),
@@ -208,22 +241,66 @@ fn render_tree_panel(frame: &mut Frame, area: Rect, nodes: &[TreeNode], exercise
           ExerciseStatus::Failing => Style::default().fg(Color::Red),
         }
       };
-      lines.push(Line::from(Span::styled(format!("  {} {}", status.symbol(), ex.name), style)));
+      let stars = "*".repeat(ex.difficulty as usize);
+      let topics_str = ex.topics.join(", ");
+      let line_text = build_exercise_line(
+        "  ",
+        "",
+        ex,
+        status.symbol(),
+        &stars,
+        &topics_str,
+        tree_width,
+        lang_width,
+        diff_width,
+        topics_width,
+      );
+      let ex_idx = exercises
+        .iter()
+        .position(|e| e.relative_path == ex.relative_path)
+        .expect("exercise must be in flat list");
+      lines.push(Line::from(Span::styled(line_text, style)));
+      line_kinds.push(LineKind::Exercise(ex_idx));
     } else {
-      // Top-level group header (no connector, matching old behaviour)
-      lines.push(Line::from(Span::styled(
-        format!("  {}/", node.name),
-        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
-      )));
+      // Top-level group header (no connector)
+      let is_collapsed = collapsed_groups.contains(&node.path);
+      let icon = if is_collapsed { " ▸" } else { " ▾" };
+      let is_cursor_here = lines.len() == overview_cursor;
+      let style = if is_cursor_here {
+        Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
+      } else {
+        Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD)
+      };
+      let gs = group_status(node, config);
+      lines.push(Line::from(Span::styled(format!("  {} {}/{}", gs.symbol(), node.name, icon), style)));
+      line_kinds.push(LineKind::Group(node.path.clone()));
 
-      // Render children recursively
-      let child_count = node.children.len();
-      for (i, child) in node.children.iter().enumerate() {
-        render_tree_node(child, config, selected_path, "    ", i + 1 == child_count, &mut lines);
+      // Render children recursively (only if not collapsed)
+      if !is_collapsed {
+        let child_count = node.children.len();
+        for (i, child) in node.children.iter().enumerate() {
+          render_tree_node(
+            child,
+            config,
+            selected_path.as_deref(),
+            "    ",
+            i + 1 == child_count,
+            &mut lines,
+            tree_width,
+            lang_width,
+            diff_width,
+            topics_width,
+            collapsed_groups,
+            exercises,
+            overview_cursor,
+            &mut line_kinds,
+          );
+        }
       }
 
-      // Blank line between top-level groups (matching old behaviour)
+      // Blank line between top-level groups
       lines.push(Line::from(""));
+      line_kinds.push(LineKind::Blank);
     }
   }
 
@@ -232,21 +309,36 @@ fn render_tree_panel(frame: &mut Frame, area: Rect, nodes: &[TreeNode], exercise
     .borders(Borders::ALL)
     .border_style(Style::default().fg(Color::DarkGray));
 
-  // Scroll the tree so the selected exercise stays visible.
   let inner_height = block.inner(area).height as usize;
-  let selected_line = find_selected_line_in_tree(nodes, exercises, overview_cursor);
-  let scroll = if selected_line >= inner_height {
-    (selected_line - inner_height + 1) as u16
+  let scroll = if overview_cursor >= inner_height {
+    (overview_cursor - inner_height + 1) as u16
   } else {
     0
   };
 
   let paragraph = Paragraph::new(lines).block(block).scroll((scroll, 0));
   frame.render_widget(paragraph, area);
+  (line_kinds.len(), line_kinds)
 }
 
 /// Recursively render a tree node and its children.
-fn render_tree_node(node: &TreeNode, config: &ProjectConfig, selected_path: Option<&str>, prefix: &str, is_last: bool, lines: &mut Vec<Line<'_>>) {
+#[allow(clippy::too_many_arguments)]
+fn render_tree_node(
+  node: &TreeNode,
+  config: &ProjectConfig,
+  selected_path: Option<&str>,
+  prefix: &str,
+  is_last: bool,
+  lines: &mut Vec<Line<'_>>,
+  tree_width: usize,
+  lang_width: usize,
+  diff_width: usize,
+  topics_width: usize,
+  collapsed_groups: &HashSet<String>,
+  exercises: &[Exercise],
+  overview_cursor: usize,
+  line_kinds: &mut Vec<LineKind>,
+) {
   let connector = if is_last { chars::tree_last() } else { chars::tree_branch() };
 
   if let Some(ex) = &node.exercise {
@@ -255,7 +347,7 @@ fn render_tree_node(node: &TreeNode, config: &ProjectConfig, selected_path: Opti
     let is_selected = selected_path == Some(ex.relative_path.as_str());
 
     let style = if is_selected {
-      Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+      Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
     } else {
       match status {
         ExerciseStatus::Complete => Style::default().fg(Color::Green),
@@ -264,68 +356,114 @@ fn render_tree_node(node: &TreeNode, config: &ProjectConfig, selected_path: Opti
       }
     };
 
-    lines.push(Line::from(Span::styled(format!("{prefix}{connector} {} {}", status.symbol(), ex.name), style)));
+    let stars = "*".repeat(ex.difficulty as usize);
+    let topics_str = ex.topics.join(", ");
+    let line_text = build_exercise_line(
+      prefix,
+      connector,
+      ex,
+      status.symbol(),
+      &stars,
+      &topics_str,
+      tree_width,
+      lang_width,
+      diff_width,
+      topics_width,
+    );
+    let ex_idx = exercises
+      .iter()
+      .position(|e| e.relative_path == ex.relative_path)
+      .expect("exercise must be in flat list");
+    lines.push(Line::from(Span::styled(line_text, style)));
+    line_kinds.push(LineKind::Exercise(ex_idx));
   } else {
     // Group header
+    let is_collapsed = collapsed_groups.contains(&node.path);
+    let icon = if is_collapsed { " ▸" } else { " ▾" };
+    let is_cursor_here = lines.len() == overview_cursor;
+    let style = if is_cursor_here {
+      Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
+    } else {
+      Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD)
+    };
+    let gs = group_status(node, config);
     lines.push(Line::from(Span::styled(
-      format!("{prefix}{connector} {}/", node.name),
-      Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+      format!("{}{} {} {}/{}", prefix, connector, gs.symbol(), node.name, icon),
+      style,
     )));
+    line_kinds.push(LineKind::Group(node.path.clone()));
 
-    // Children
-    let child_prefix = format!("{prefix}{}", if is_last { "  " } else { "│ " });
-    let child_count = node.children.len();
-    for (i, child) in node.children.iter().enumerate() {
-      render_tree_node(child, config, selected_path, &child_prefix, i + 1 == child_count, lines);
+    // Children (only if not collapsed)
+    if !is_collapsed {
+      let child_prefix = format!("{prefix}{}", if is_last { "  " } else { "│ " });
+      let child_count = node.children.len();
+      for (i, child) in node.children.iter().enumerate() {
+        render_tree_node(
+          child,
+          config,
+          selected_path,
+          &child_prefix,
+          i + 1 == child_count,
+          lines,
+          tree_width,
+          lang_width,
+          diff_width,
+          topics_width,
+          collapsed_groups,
+          exercises,
+          overview_cursor,
+          line_kinds,
+        );
+      }
     }
   }
 }
 
-/// Return the zero-based line index in the tree output that corresponds to
-/// the exercise at `overview_cursor`.
-fn find_selected_line_in_tree(nodes: &[TreeNode], exercises: &[Exercise], overview_cursor: usize) -> usize {
-  let selected_path = exercises.get(overview_cursor).map(|ex| ex.relative_path.as_str());
-  let mut line: usize = 0;
-  for node in nodes {
-    if node.is_group() {
-      // Top-level group header
-      line += 1;
-      // Children (recursive) — return early if found
-      if find_selected_line_in_tree_children(&node.children, selected_path, &mut line) {
-        return line.saturating_sub(1);
-      }
-      // Blank line after top-level group
-      line += 1;
-    } else if let Some(ex) = &node.exercise {
-      // Top-level exercise
-      line += 1;
-      if selected_path == Some(ex.relative_path.as_str()) {
-        return line.saturating_sub(1);
-      }
-    }
-  }
-  line.saturating_sub(1)
+/// Given a tree and a tree line index, return the relative path of the
+/// exercise at that line (or `None` if the line is a group header, blank,
+/// or out of bounds).
+fn exercise_path_at_line(nodes: &[TreeNode], target: usize, collapsed_groups: &HashSet<String>, has_header: bool) -> Option<String> {
+  let mut line = if has_header { 1 } else { 0 };
+  walk_nodes_for_path(nodes, target, &mut line, collapsed_groups, true)
 }
 
-/// Recursively traverse child tree nodes, counting rendered lines,
-/// until we find the exercise that matches `selected_path`.
-fn find_selected_line_in_tree_children(nodes: &[TreeNode], selected_path: Option<&str>, line: &mut usize) -> bool {
+/// Recursive helper for [`exercise_path_at_line`].
+///
+/// `top_level` controls whether blank separators (added by
+/// `render_tree_panel` between top-level groups) are counted.
+fn walk_nodes_for_path(nodes: &[TreeNode], target: usize, line: &mut usize, collapsed_groups: &HashSet<String>, top_level: bool) -> Option<String> {
   for node in nodes {
     if let Some(ex) = &node.exercise {
-      *line += 1;
-      if selected_path == Some(ex.relative_path.as_str()) {
-        return true;
+      if *line == target {
+        return Some(ex.relative_path.clone());
       }
+      *line += 1;
     } else {
       // Group header
+      if *line == target {
+        return None;
+      }
       *line += 1;
-      // Children
-      if find_selected_line_in_tree_children(&node.children, selected_path, line) {
-        return true;
+      // Children (only if not collapsed)
+      if !collapsed_groups.contains(&node.path)
+        && let Some(path) = walk_nodes_for_path(
+          &node.children,
+          target,
+          line,
+          collapsed_groups,
+          false, // never top_level — no blank separators between nested groups
+        )
+      {
+        return Some(path);
+      }
+      // Top-level groups have a blank separator line after them (matching
+      // render_tree_panel). Nested groups do not.
+      if top_level {
+        *line += 1;
       }
     }
   }
-  false
+  None
 }
 
 // ---------------------------------------------------------------------------

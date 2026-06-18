@@ -223,6 +223,10 @@ pub struct Exercise {
 pub struct TreeNode {
   /// Directory name (e.g. `"01-basics"` or `"01-hello-world"`).
   pub name: String,
+  /// Relative path from repo root (e.g. `"01-basics"` for a top-level
+  /// group, or `"01-basics/02-subgroup"` for a nested group).
+  /// For exercise nodes the path lives in [`Exercise::relative_path`].
+  pub path: String,
   /// Sub-groups or sub-exercises.
   pub children: Vec<TreeNode>,
   /// If this node is an exercise, contains the exercise data.
@@ -625,6 +629,7 @@ fn build_tree(
         Ok(ex) => {
           nodes.push(TreeNode {
             name,
+            path: child_rel.clone(),
             children: Vec::new(),
             exercise: Some(ex.clone()),
           });
@@ -637,6 +642,7 @@ fn build_tree(
       let children = build_tree(&dir, &child_rel, pattern, exercises, errors);
       nodes.push(TreeNode {
         name,
+        path: child_rel.clone(),
         children,
         exercise: None,
       });
