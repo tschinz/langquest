@@ -123,7 +123,7 @@ fn render_progress_bar(frame: &mut Frame, area: Rect, _modules: &[TreeNode], exe
     })
     .count();
 
-  let pct = if total > 0 { (completed * 100) / total } else { 0 };
+  let pct = completed.checked_mul(100).and_then(|n| n.checked_div(total)).unwrap_or(0);
 
   // Build a compact progress bar: "57% [***xx~*xx]"
   // Each symbol is individually colored: * = green, ~ = yellow, x = dark gray.
