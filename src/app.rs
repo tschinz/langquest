@@ -3,6 +3,9 @@
 use std::collections::HashSet;
 use std::io::BufWriter;
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::mpsc;
 use std::time::Duration;
 
 use anyhow::{Result, bail};
@@ -93,6 +96,14 @@ impl ExercisePage {
   }
 }
 
+/// Background verification completion message.
+struct VerifyMessage {
+  request_id: u64,
+  exercise_path: String,
+  result: VerificationResult,
+  main_output: String,
+}
+
 /// Main application state.
 pub struct App {
   /// Tree of discovered groups and exercises.
@@ -144,6 +155,16 @@ pub struct App {
   last_width: u16,
   /// Whether verification is queued/running for the current exercise.
   pub verifying: bool,
+  /// Monotonic request id for background verification jobs.
+  verify_request_id: u64,
+  /// Shared generation used by worker threads to cancel stale requests.
+  verify_generation: Arc<AtomicU64>,
+  /// Request id of the verification result we still care about.
+  active_verify_request: Option<u64>,
+  /// Sender side used to report verification completion from worker threads.
+  verify_result_tx: mpsc::Sender<VerifyMessage>,
+  /// Receiver side polled by the TUI loop for completed verification results.
+  verify_result_rx: mpsc::Receiver<VerifyMessage>,
 }
 
 impl App {
@@ -170,6 +191,9 @@ impl App {
       .and_then(|name| all_exercises.iter().position(|ex| ex.relative_path == name))
       .unwrap_or(0);
 
+    let (verify_result_tx, verify_result_rx) = mpsc::channel();
+    let verify_generation = Arc::new(AtomicU64::new(0));
+
     let mut app = App {
       tree,
       exercises: all_exercises,
@@ -194,6 +218,11 @@ impl App {
       needs_redraw: true,
       last_width: 0,
       verifying: false,
+      verify_request_id: 0,
+      verify_generation,
+      active_verify_request: None,
+      verify_result_tx,
+      verify_result_rx,
     };
 
     // Pre-initialise hints_max for exercises with solution data so the TOML
@@ -208,7 +237,7 @@ impl App {
     }
 
     app.setup_watcher();
-    app.run_verify();
+    app.queue_verify();
     app.save_config();
 
     Ok(app)
@@ -274,8 +303,10 @@ impl App {
     self.watcher = ExerciseWatcher::new(&source).ok();
   }
 
-  /// Run verification on the current exercise and update state.
-  fn run_verify(&mut self) {
+  /// Queue verification in a worker thread so the UI remains responsive.
+  ///
+  /// The latest request always supersedes previous in-flight requests.
+  fn queue_verify(&mut self) {
     let exercise = self.current_exercise().clone();
 
     // Auto-populate ripes.bin the first time a RISC-V exercise is run so
@@ -289,20 +320,59 @@ impl App {
       self.save_config();
     }
 
-    let result = runner::verify(&exercise, &self.config);
-    self.config.update_score(&exercise.relative_path, result.score, result.threshold);
-    self.last_result = Some(result);
+    self.verify_request_id = self.verify_request_id.wrapping_add(1);
+    let request_id = self.verify_request_id;
+    self.verify_generation.store(request_id, Ordering::Relaxed);
+    self.active_verify_request = Some(request_id);
 
-    // Capture output from the exercise's main() for the "Debug" page.
-    if exercise.language == crate::exercise::Language::Rust {
-      self.last_main_output = runner::rust_run_main(&exercise, &self.config.rust);
-    }
-  }
+    let config = self.config.clone();
+    let tx = self.verify_result_tx.clone();
+    let verify_generation = Arc::clone(&self.verify_generation);
 
-  /// Queue verification so the UI can render a "running" status first.
-  fn queue_verify(&mut self) {
+    std::thread::spawn(move || {
+      let cancel = runner::VerifyCancel::new(verify_generation, request_id);
+      let result = runner::verify(&exercise, &config, &cancel);
+      // Capture output from main() for the "Debug" page.
+      let main_output = if exercise.language == crate::exercise::Language::Rust {
+        runner::rust_run_main(&exercise, &config.rust, &cancel)
+      } else {
+        String::new()
+      };
+
+      let _ = tx.send(VerifyMessage {
+        request_id,
+        exercise_path: exercise.relative_path.clone(),
+        result,
+        main_output,
+      });
+    });
+
     self.verifying = true;
     self.needs_redraw = true;
+  }
+
+  /// Drain completed verification messages and apply only the latest request.
+  fn poll_verify_results(&mut self) {
+    let mut applied_latest = false;
+
+    while let Ok(msg) = self.verify_result_rx.try_recv() {
+      if Some(msg.request_id) != self.active_verify_request {
+        // Superseded result: treat as cancelled from the UI perspective.
+        continue;
+      }
+
+      self.config.update_score(&msg.exercise_path, msg.result.score, msg.result.threshold);
+      self.last_result = Some(msg.result);
+      self.last_main_output = msg.main_output;
+      self.active_verify_request = None;
+      self.verifying = false;
+      applied_latest = true;
+    }
+
+    if applied_latest {
+      self.save_config();
+      self.needs_redraw = true;
+    }
   }
 
   /// The main TUI event loop.
@@ -366,12 +436,7 @@ impl App {
         }
       }
 
-      if self.verifying {
-        self.verifying = false;
-        self.run_verify();
-        self.save_config();
-        self.needs_redraw = true;
-      }
+      self.poll_verify_results();
 
       // Check for file-change events from the watcher.
       if let Some(ref watcher) = self.watcher {
