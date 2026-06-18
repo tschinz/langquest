@@ -124,25 +124,32 @@ fn render_progress_bar(frame: &mut Frame, area: Rect, _modules: &[TreeNode], exe
     })
     .count();
 
-  // Bar width: area.width minus the label overhead.
-  // Label format: "Progress: [====----]  12/42"
-  let label_prefix = "Progress: [";
-  let label_suffix_example = format!("]  {completed}/{total}");
-  let overhead = label_prefix.len() + label_suffix_example.len();
-  let bar_width = (area.width as usize).saturating_sub(overhead);
+  let pct = completed.checked_mul(100).and_then(|n| n.checked_div(total)).unwrap_or(0);
 
-  let filled = (bar_width * completed).checked_div(total).unwrap_or(0);
-  let empty = bar_width.saturating_sub(filled);
-
+  // Build a compact progress bar: "57% [***xx~*xx]"
+  // Each symbol is individually colored: * = green, ~ = yellow, x = dark gray.
   let mut spans: Vec<Span<'_>> = Vec::new();
-  spans.push(Span::styled(label_prefix.to_string(), Style::default().fg(Color::White)));
-  spans.push(Span::styled("=".repeat(filled), Style::default().fg(Color::Green)));
-  spans.push(Span::styled("-".repeat(empty), Style::default().fg(Color::DarkGray)));
-  spans.push(Span::styled(format!("]  {completed}/{total}"), Style::default().fg(Color::White)));
+  spans.push(Span::styled(format!("{}% [", pct), Style::default().fg(Color::White)));
 
-  let line = Line::from(spans);
+  for exercise in exercises {
+    let state = config.get_state(&exercise.relative_path);
+    let status = derive_status(&state);
+
+    let (ch, style) = match status {
+      ExerciseStatus::Complete => ("*", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+      ExerciseStatus::Partial => ("~", Style::default().fg(Color::Yellow)),
+      ExerciseStatus::Failing => ("x", Style::default().fg(Color::Red)),
+    };
+
+    spans.push(Span::styled(ch.to_string(), style));
+  }
+
+  spans.push(Span::styled("]", Style::default().fg(Color::White)));
+  spans.push(Span::styled(format!("   Done: {completed}/{total}"), Style::default().fg(Color::White)));
+
+  let lines = vec![Line::from(spans)];
   let block = Block::default().borders(Borders::NONE);
-  let paragraph = Paragraph::new(vec![line]).block(block).wrap(Wrap { trim: false });
+  let paragraph = Paragraph::new(lines).block(block).alignment(Alignment::Center).wrap(Wrap { trim: false });
   frame.render_widget(paragraph, area);
 }
 
