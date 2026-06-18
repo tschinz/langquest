@@ -59,4 +59,4 @@ cmd = "g++ -std=c++20 <files> -o <out>"
 
 [ripes]
 bin = "/Applications/Ripes.app/Contents/MacOS/Ripes"
-cmd = "ripes --mode cli -t asm --proc RV32_SS --json --regs --runinfo --src <file>"
+cmd = "ripes --mode cli -t asm --proc RV32_SS --json --regs --runinfo --timeout 5000 --src <file>"
