@@ -241,7 +241,7 @@ fn render_tree_panel(
       let status = derive_status(&state);
       let is_selected = selected_path.as_deref() == Some(ex.relative_path.as_str());
       let style = if is_selected {
-        Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
+        Style::default().fg(Color::Rgb(255,0,255)).add_modifier(Modifier::BOLD)
       } else {
         match status {
           ExerciseStatus::Complete => Style::default().fg(Color::Green),
@@ -275,7 +275,7 @@ fn render_tree_panel(
       let icon = if is_collapsed { " ▸" } else { " ▾" };
       let is_cursor_here = lines.len() == *overview_cursor;
       let style = if is_cursor_here {
-        Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
+        Style::default().fg(Color::Rgb(255,0,255)).add_modifier(Modifier::BOLD)
       } else {
         Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD)
       };
@@ -358,7 +358,7 @@ fn render_tree_node(
     let is_selected = selected_path == Some(ex.relative_path.as_str());
 
     let style = if is_selected {
-      Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
+      Style::default().fg(Color::Rgb(255,0,255)).add_modifier(Modifier::BOLD)
     } else {
       match status {
         ExerciseStatus::Complete => Style::default().fg(Color::Green),
@@ -393,7 +393,7 @@ fn render_tree_node(
     let icon = if is_collapsed { " ▸" } else { " ▾" };
     let is_cursor_here = lines.len() == *overview_cursor;
     let style = if is_cursor_here {
-      Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
+      Style::default().fg(Color::Rgb(255,0,255)).add_modifier(Modifier::BOLD)
     } else {
       Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD)
     };
