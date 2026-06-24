@@ -17,6 +17,16 @@ pub struct ExerciseState {
   pub passed: bool,
   /// Whether the reference solution has been viewed (sticky - never resets to false).
   pub solution_seen: bool,
+  /// Cumulative number of hint reveals across all sessions.
+  /// Each time the user presses 'h' this counter goes up by 1,
+  /// even if the same hint level is reached again in a later session.
+  #[serde(default)]
+  pub hints_shown: usize,
+  /// Furthest hint level reached, stored as "hint_level/total" (e.g. "3/5").
+  /// The first component is the highest hint index the user has ever revealed;
+  /// the second is the total number of hints for this exercise.
+  #[serde(default, skip_serializing_if = "String::is_empty")]
+  pub hints_max: String,
 }
 
 impl Default for ExerciseState {
@@ -25,6 +35,8 @@ impl Default for ExerciseState {
       best_score: 0.0,
       passed: false,
       solution_seen: false,
+      hints_shown: 0,
+      hints_max: String::new(),
     }
   }
 }
@@ -235,6 +247,38 @@ impl ProjectConfig {
     state.solution_seen = true;
   }
 
+  /// Ensure `hints_max` is initialised to `"0/{hints_total}"` when it is
+  /// still empty (e.g. for a freshly discovered exercise).  No-op once the
+  /// field already has a value.
+  pub fn init_hints_max(&mut self, exercise_path: &str, hints_total: usize) {
+    let state = self.exercises.entry(exercise_path.to_owned()).or_default();
+    if state.hints_max.is_empty() {
+      state.hints_max = format!("0/{}", hints_total);
+    }
+  }
+
+  /// Record that the user revealed one more hint for an exercise.
+  ///
+  /// - `hints_shown` is incremented by 1 (cumulative across sessions).
+  /// - `hints_max` is updated to `"{hints_revealed}/{hints_total}"` whenever
+  ///   `hints_revealed` exceeds the previously stored numerator.
+  pub fn record_hint_reveal(&mut self, exercise_path: &str, hints_revealed: usize, hints_total: usize) {
+    let state = self.exercises.entry(exercise_path.to_owned()).or_default();
+
+    state.hints_shown += 1;
+
+    // Initialise to "0/<total>" if still empty (shouldn't normally happen
+    // because App::new pre-initialises all exercises, but be defensive).
+    if state.hints_max.is_empty() {
+      state.hints_max = format!("0/{}", hints_total);
+    }
+
+    let current_max = state.hints_max.split('/').next().and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
+    if hints_revealed > current_max {
+      state.hints_max = format!("{}/{}", hints_revealed, hints_total);
+    }
+  }
+
   /// Reset all exercise state and optionally set the current exercise to
   /// `first_exercise`.
   pub fn reset(&mut self, first_exercise: Option<&str>) {
@@ -270,6 +314,8 @@ mod tests {
     assert_eq!(state.best_score, 0.0);
     assert!(!state.passed);
     assert!(!state.solution_seen);
+    assert_eq!(state.hints_shown, 0);
+    assert!(state.hints_max.is_empty());
   }
 
   #[test]
@@ -299,6 +345,10 @@ mod tests {
     };
     cfg.update_score("01-basics/01-hello", 0.8, 0.7);
     cfg.mark_solution_seen("01-basics/01-hello");
+    // Simulate 3 hint reveals in first session, 2 more in a second session
+    cfg.record_hint_reveal("01-basics/01-hello", 1, 5);
+    cfg.record_hint_reveal("01-basics/01-hello", 2, 5);
+    cfg.record_hint_reveal("01-basics/01-hello", 3, 5);
 
     cfg.save(&path).expect("save should succeed");
     let loaded = ProjectConfig::load(&path).expect("load should succeed");
@@ -308,6 +358,10 @@ mod tests {
     assert_eq!(state.best_score, 0.8);
     assert!(state.passed);
     assert!(state.solution_seen);
+    // Cumulative counter: 3 reveal events across sessions
+    assert_eq!(state.hints_shown, 3);
+    // Furthest level reached: 3 out of 5
+    assert_eq!(state.hints_max, "3/5");
 
     let _ = fs::remove_dir_all(&dir);
   }
@@ -319,6 +373,8 @@ mod tests {
     assert_eq!(state.best_score, 0.0);
     assert!(!state.passed);
     assert!(!state.solution_seen);
+    assert_eq!(state.hints_shown, 0);
+    assert!(state.hints_max.is_empty());
   }
 
   #[test]
@@ -354,6 +410,36 @@ mod tests {
     let mut cfg = ProjectConfig::default();
     cfg.mark_solution_seen("ex");
     assert!(cfg.get_state("ex").solution_seen);
+  }
+
+  #[test]
+  fn record_hint_reveal_cumulative_and_max() {
+    let mut cfg = ProjectConfig::default();
+
+    // Session 1: reveal 3 hints sequentially
+    cfg.record_hint_reveal("ex", 1, 5);
+    cfg.record_hint_reveal("ex", 2, 5);
+    cfg.record_hint_reveal("ex", 3, 5);
+
+    let state = cfg.get_state("ex");
+    assert_eq!(state.hints_shown, 3); // 3 reveal events
+    assert_eq!(state.hints_max, "3/5"); // furthest level = 3
+
+    // Session 2: user comes back and reveals hints again (levels 1, 2, 3 again)
+    cfg.record_hint_reveal("ex", 1, 5);
+    cfg.record_hint_reveal("ex", 2, 5);
+
+    let state = cfg.get_state("ex");
+    assert_eq!(state.hints_shown, 5); // 3 + 2 = 5 reveal events
+    assert_eq!(state.hints_max, "3/5"); // furthest level unchanged (never exceeded 3)
+
+    // Session 3: user goes further and reaches level 5
+    cfg.record_hint_reveal("ex", 4, 5);
+    cfg.record_hint_reveal("ex", 5, 5);
+
+    let state = cfg.get_state("ex");
+    assert_eq!(state.hints_shown, 7); // 5 + 2 = 7 reveal events
+    assert_eq!(state.hints_max, "5/5"); // furthest level now 5
   }
 
   #[test]

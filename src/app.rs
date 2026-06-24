@@ -193,6 +193,17 @@ impl App {
       last_width: 0,
     };
 
+    // Pre-initialise hints_max for exercises with solution data so the TOML
+    // shows "0/<total>" from the start rather than an empty string or "0/0".
+    for exercise in &app.exercises {
+      if let Some(ref sd) = exercise.solution_data {
+        let total = sd.hints.len();
+        if total > 0 {
+          app.config.init_hints_max(&exercise.relative_path, total);
+        }
+      }
+    }
+
     app.setup_watcher();
     app.run_verify();
     app.save_config();
@@ -630,6 +641,12 @@ impl App {
       // Still hints left - reveal the next one and clear any pending flag.
       self.hints_revealed += 1;
       self.solution_unlock_pending = false;
+
+      // Persist hint progress (cumulative counter + furthest level reached).
+      let path = self.current_exercise().relative_path.clone();
+      self.config.record_hint_reveal(&path, self.hints_revealed, total);
+      self.save_config();
+
       self.scroll_to_hint_line(false);
     } else if !self.solution_unlock_pending {
       // All hints shown: first extra `h` → show warning.

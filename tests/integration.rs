@@ -618,6 +618,8 @@ mod status {
       best_score: 0.3,
       passed: false,
       solution_seen: false,
+      hints_shown: 0,
+      hints_max: String::new(),
     };
     let status = lq::ui::overview::derive_status(&state);
     assert_eq!(status, lq::exercise::ExerciseStatus::Failing);
@@ -629,6 +631,8 @@ mod status {
       best_score: 1.0,
       passed: true,
       solution_seen: false,
+      hints_shown: 0,
+      hints_max: String::new(),
     };
     let status = lq::ui::overview::derive_status(&state);
     assert_eq!(status, lq::exercise::ExerciseStatus::Partial);
@@ -640,6 +644,8 @@ mod status {
       best_score: 1.0,
       passed: true,
       solution_seen: true,
+      hints_shown: 0,
+      hints_max: String::new(),
     };
     let status = lq::ui::overview::derive_status(&state);
     assert_eq!(status, lq::exercise::ExerciseStatus::Complete);
@@ -651,6 +657,8 @@ mod status {
       best_score: 0.0,
       passed: false,
       solution_seen: true,
+      hints_shown: 0,
+      hints_max: String::new(),
     };
     let status = lq::ui::overview::derive_status(&state);
     assert_eq!(status, lq::exercise::ExerciseStatus::Failing);

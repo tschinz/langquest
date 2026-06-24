@@ -496,6 +496,8 @@ mod tests {
       best_score: 0.0,
       passed: false,
       solution_seen: false,
+      hints_shown: 0,
+      hints_max: String::new(),
     };
     assert_eq!(derive_status(&state), ExerciseStatus::Failing);
   }
@@ -506,6 +508,8 @@ mod tests {
       best_score: 1.0,
       passed: true,
       solution_seen: false,
+      hints_shown: 0,
+      hints_max: String::new(),
     };
     assert_eq!(derive_status(&state), ExerciseStatus::Partial);
   }
@@ -516,6 +520,8 @@ mod tests {
       best_score: 1.0,
       passed: true,
       solution_seen: true,
+      hints_shown: 0,
+      hints_max: String::new(),
     };
     assert_eq!(derive_status(&state), ExerciseStatus::Complete);
   }
@@ -526,6 +532,8 @@ mod tests {
       best_score: 0.3,
       passed: false,
       solution_seen: true,
+      hints_shown: 0,
+      hints_max: String::new(),
     };
     assert_eq!(derive_status(&state), ExerciseStatus::Failing);
   }
