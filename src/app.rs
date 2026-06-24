@@ -832,7 +832,7 @@ impl App {
   ///    - macOS  : `open -t <file>` - always opens as text, even for unknown
   ///      extensions like `.asm` where plain `open` would fail.
   ///    - Linux  : `xdg-open <file>`
-  ///    - Windows: `notepad <file>` - guaranteed to open any file as text.
+  ///    - Windows: `explorer <file>` - guaranteed to open any file as text.
   ///
   /// The process is spawned and forgotten - the TUI keeps running.
   fn open_in_editor(&self) {
@@ -856,7 +856,7 @@ impl App {
     let _ = std::process::Command::new("xdg-open").arg(path).spawn();
 
     #[cfg(target_os = "windows")]
-    let _ = std::process::Command::new("notepad").arg(path).spawn();
+    let _ = std::process::Command::new("explorer").arg(path).spawn();
   }
 
   /// Check whether the Solution page is accessible for the current exercise.
