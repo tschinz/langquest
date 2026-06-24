@@ -31,7 +31,6 @@ enum Command {
 }
 
 fn main() -> Result<()> {
-  eprintln!(" LangQuest v{} starting…", env!("CARGO_PKG_VERSION"));
 
   let cli = Cli::parse();
 
