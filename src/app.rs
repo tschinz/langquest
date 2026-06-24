@@ -14,6 +14,7 @@ use crate::exercise::{Exercise, ExerciseStatus, TreeNode, discover_exercises};
 use crate::runner::{self, ExerciseWatcher, VerificationResult};
 use crate::ui;
 use crate::ui::cache::RenderCache;
+use crate::ui::exercise_view::{strip_code_fences, wrap_line};
 use crate::ui::markdown::PendingOsc8;
 
 /// What a tree line represents — used to map cursor position to action.
@@ -653,22 +654,59 @@ impl App {
   ///   2        blank
   ///   3…3+N-1  runner output  (N = result.output.lines().count())
   ///   3+N      blank before hints
-  ///   4+N+k    hint k  (k = 0-based index)
+  ///   4+N+…    hints (each has a header + variable content lines)
   /// ```
-  /// When `is_warning` is true all `total_hints` hints are revealed and the
-  /// `⚠` line sits at `4 + N + total_hints + 1` (after a blank separator).
+  /// When `is_warning` is true all hints are revealed and the `⚠` line
+  /// sits after a blank separator following the last hint's content.
   fn scroll_to_hint_line(&mut self, is_warning: bool, total_hints: usize) {
     let output_lines = self.last_result.as_ref().map(|r| r.output.lines().count()).unwrap_or(0);
+
+    // Base offset before any hint content:
+    //   0 = progress, 1 = status, 2 = blank, 3..3+N-1 = output, 3+N = blank before hints
+    let base = 4 + output_lines;
 
     let target = if is_warning {
       // blank at 4+N+total_hints, ⚠ at 4+N+total_hints+1
       5 + output_lines + total_hints
     } else {
-      // hints_revealed already incremented; hint index is hints_revealed-1
-      4 + output_lines + self.hints_revealed - 1
+      // hints_revealed was already incremented; the just-revealed hint
+      // has index (hints_revealed - 1).  Sum lines for all hints before it.
+      let revealed_idx = self.hints_revealed; // already incremented
+      let lines_before = self.hint_lines_before(revealed_idx.saturating_sub(1));
+      // The header line of the just-revealed hint.
+      base + lines_before
     };
 
     self.scroll_offset = target.saturating_sub(2);
+  }
+
+  /// Compute the number of rendered lines consumed by hints 0..up_to (exclusive).
+  fn hint_lines_before(&self, up_to: usize) -> usize {
+    let hint_width = self.last_width.saturating_sub(6) as usize;
+    let exercise = self.current_exercise();
+    let Some(ref sd) = exercise.solution_data else { return 0 };
+
+    let mut total = 0;
+    for i in 0..up_to.min(sd.hints.len()) {
+      total += 1; // header line
+      total += Self::hint_content_lines(&sd.hints[i], hint_width);
+    }
+    total
+  }
+
+  /// Number of rendered lines a single hint's body produces (after stripping
+  /// code fences and word-wrapping at `hint_width`).  Does *not* include the
+  /// header line.
+  fn hint_content_lines(raw: &str, hint_width: usize) -> usize {
+    let text = strip_code_fences(raw);
+    if text.is_empty() {
+      return 0;
+    }
+    let mut count = 0;
+    for line in text.lines() {
+      count += wrap_line(line, hint_width).len();
+    }
+    count
   }
 
   /// Handle mouse events (scrolling).

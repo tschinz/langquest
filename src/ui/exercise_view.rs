@@ -319,7 +319,7 @@ fn render_output(
 /// Strip markdown code-fence lines (```, ```rust, ```python, etc.) from
 /// the start and end of a hint string, since they are useless in plain-text
 /// output and just clutter the display.
-fn strip_code_fences(text: &str) -> String {
+pub(crate) fn strip_code_fences(text: &str) -> String {
   let mut lines: Vec<&str> = text.lines().collect();
   // Strip leading fence lines
   while let Some(first) = lines.first() {
@@ -345,7 +345,7 @@ fn strip_code_fences(text: &str) -> String {
 /// Word-wrap a single line at `max_width` characters, returning multiple
 /// lines. This prevents ratatui from wrapping continuation lines without
 /// the proper indent.
-fn wrap_line(text: &str, max_width: usize) -> Vec<String> {
+pub(crate) fn wrap_line(text: &str, max_width: usize) -> Vec<String> {
   if text.len() <= max_width || max_width < 10 {
     return vec![text.to_string()];
   }
