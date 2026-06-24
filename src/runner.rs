@@ -628,6 +628,13 @@ fn parse_ripes_output(json_str: &str) -> Result<(HashMap<String, i64>, Option<u6
       map.insert(k.clone(), n);
     } else if let Some(n) = v.as_u64() {
       map.insert(k.clone(), n as i64);
+    } else if let Some(s) = v.as_str() {
+      // Some Ripes builds emit register values as quoted strings
+      // (e.g. "42" or "0x0000 0022"). Parse those instead of
+      // silently dropping the register from the map.
+      if let Ok(n) = parse_reg_value(s) {
+        map.insert(k.clone(), n);
+      }
     }
   }
 
@@ -1619,6 +1626,28 @@ addi s2, s0, 1
     assert!(regs_equal(-1, 0xFFFF_FFFF_u64 as i64));
     assert!(regs_equal(1, 1));
     assert!(!regs_equal(1, 2));
+  }
+
+  // -- parse_ripes_output ---------------------------------------------
+
+  #[test]
+  fn parse_ripes_output_accepts_numeric_values_as_strings() {
+    let json = r#"{"registers": {"x5": "42", "x6": "-1", "x7": "0x0000 0022"}, "cycles": 99}"#;
+    let (regs, cycles) = parse_ripes_output(json).expect("expected valid parse");
+
+    assert_eq!(regs.get("x5"), Some(&42));
+    assert_eq!(regs.get("x6"), Some(&-1));
+    assert_eq!(regs.get("x7"), Some(&0x22));
+    assert_eq!(cycles, Some(99));
+  }
+
+  #[test]
+  fn parse_ripes_output_handles_prefixed_lines_with_string_values() {
+    let out = "Program exited with code: 0\n{\"registers\":{\"x18\":\"1\"},\"cycles\":44}";
+    let (regs, cycles) = parse_ripes_output(out).expect("expected valid parse");
+
+    assert_eq!(regs.get("x18"), Some(&1));
+    assert_eq!(cycles, Some(44));
   }
 
   // -- parse_pytest_output ---------------------------------------------
