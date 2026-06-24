@@ -394,7 +394,7 @@ pub fn load_exercise(exercise_dir: &Path, module_name: &str) -> Result<Exercise,
 
   let raw: RawFrontmatter = toml::from_str(toml_str).map_err(|e| ExerciseError::FrontmatterParse {
     path: task_path.clone(),
-    source: e,
+    source: Box::new(e),
   })?;
 
   let fm = validate_frontmatter(raw, &task_path)?;
@@ -508,7 +508,10 @@ fn load_solution_data(exercise_dir: &Path) -> Result<Option<SolutionData>, Exerc
 
   let (toml_str, body) = parse_frontmatter(&content).ok_or_else(|| ExerciseError::MissingFrontmatter { path: solution_md.clone() })?;
 
-  let raw: RawSolutionFrontmatter = toml::from_str(toml_str).map_err(|e| ExerciseError::SolutionParse { path: solution_md, source: e })?;
+  let raw: RawSolutionFrontmatter = toml::from_str(toml_str).map_err(|e| ExerciseError::SolutionParse {
+    path: solution_md,
+    source: Box::new(e),
+  })?;
 
   Ok(Some(SolutionData {
     title: raw.title,

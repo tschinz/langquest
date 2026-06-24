@@ -187,7 +187,7 @@ impl ProjectConfig {
 
     toml::from_str(&contents).map_err(|e| ConfigError::Parse {
       path: path.to_path_buf(),
-      source: e,
+      source: Box::new(e),
     })
   }
 

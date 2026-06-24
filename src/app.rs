@@ -630,11 +630,11 @@ impl App {
       // Still hints left - reveal the next one and clear any pending flag.
       self.hints_revealed += 1;
       self.solution_unlock_pending = false;
-      self.scroll_to_hint_line(false, total);
+      self.scroll_to_hint_line(false);
     } else if !self.solution_unlock_pending {
       // All hints shown: first extra `h` → show warning.
       self.solution_unlock_pending = true;
-      self.scroll_to_hint_line(true, total);
+      self.scroll_to_hint_line(true);
     } else {
       // Second extra `h` → actually unlock the solution and jump to it.
       self.solution_unlock_pending = false;
@@ -649,7 +649,7 @@ impl App {
   ///
   /// Estimates the total content height after the reveal, then sets the
   /// scroll offset so the last line sits at the bottom of the viewport.
-  fn scroll_to_hint_line(&mut self, is_warning: bool, total_hints: usize) {
+  fn scroll_to_hint_line(&mut self, is_warning: bool) {
     let area_width = self.last_width as usize;
     let hint_width = self.last_width.saturating_sub(6) as usize;
 
@@ -682,15 +682,13 @@ impl App {
     // Trailer after the last hint: blank + message
     let trailer = if is_warning {
       3 // blank + "⚠" message + instruction
-    } else if revealed < total_hints {
-      2 // blank + "Press 'h' to reveal next hint"
     } else {
-      2 // blank + "No more hints…"
+      2 // blank + prompt ("Press 'h'…" or "No more hints…")
     };
 
     let total_lines = base + hint_lines + trailer;
     let vh = self.viewport_height.max(1);
-    self.scroll_offset = if total_lines > vh { total_lines - vh } else { 0 };
+    self.scroll_offset = total_lines.saturating_sub(vh);
   }
 
   /// Number of rendered lines a single hint's body produces (after stripping

@@ -12,7 +12,7 @@ pub enum ConfigError {
 
   /// Failed to parse the config file as TOML.
   #[error("failed to parse config file {path}: {source}")]
-  Parse { path: PathBuf, source: toml::de::Error },
+  Parse { path: PathBuf, source: Box<toml::de::Error> },
 
   /// Failed to serialize config to TOML.
   #[error("failed to serialize config: {source}")]
@@ -40,7 +40,7 @@ pub enum ExerciseError {
 
   /// Failed to parse TOML frontmatter.
   #[error("failed to parse frontmatter in {path}: {source}")]
-  FrontmatterParse { path: PathBuf, source: toml::de::Error },
+  FrontmatterParse { path: PathBuf, source: Box<toml::de::Error> },
 
   /// No student source file found in exercise directory.
   #[error("no student source file found in {path}")]
@@ -52,7 +52,7 @@ pub enum ExerciseError {
 
   /// Failed to parse solution.md frontmatter.
   #[error("failed to parse solution file {path}: {source}")]
-  SolutionParse { path: PathBuf, source: toml::de::Error },
+  SolutionParse { path: PathBuf, source: Box<toml::de::Error> },
 
   /// Invalid exercise directory structure.
   #[error("invalid exercise structure at {path}: {reason}")]
