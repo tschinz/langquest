@@ -297,10 +297,8 @@ fn render_output(
   last_result: Option<&VerificationResult>,
   scroll_offset: usize,
 ) -> usize {
-  // Available width for hint text: area minus block borders (2) minus 4-space indent
-  let hint_width = area.width.saturating_sub(6) as usize;
   let lines = match last_result {
-    Some(result) => build_output_lines(exercise, hints_revealed, solution_unlock_pending, result, hint_width),
+    Some(result) => build_output_lines(exercise, hints_revealed, solution_unlock_pending, result, area.width as usize),
     None => vec![Line::from("No verification result yet. Save your file to trigger verification.")],
   };
 
@@ -375,8 +373,10 @@ fn build_output_lines<'a>(
   hints_revealed: usize,
   solution_unlock_pending: bool,
   result: &'a VerificationResult,
-  hint_width: usize,
+  area_width: usize,
 ) -> Vec<Line<'a>> {
+  // Hint lines are indented by 4 spaces; subtract that plus a safety margin.
+  let hint_width = area_width.saturating_sub(6);
   let mut lines: Vec<Line<'a>> = Vec::new();
 
   // Progress bar
@@ -399,9 +399,11 @@ fn build_output_lines<'a>(
   // Blank line
   lines.push(Line::from(""));
 
-  // Runner output
+  // Runner output — pre-wrapped so lines.len() reflects visual row count
   for line in result.output.lines() {
-    lines.push(Line::from(line.to_string()));
+    for wrapped in wrap_line(line, area_width) {
+      lines.push(Line::from(wrapped));
+    }
   }
 
   // Blank line before hints

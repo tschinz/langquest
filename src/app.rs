@@ -645,53 +645,52 @@ impl App {
   }
 
   /// Scroll the Output page so the newly revealed hint or unlock warning is
-  /// visible, with two lines of context above it.
+  /// visible at the very bottom of the viewport.
   ///
-  /// Line layout produced by `build_output_lines` (when a result exists):
-  /// ```text
-  ///   0        progress bar
-  ///   1        PASSED / FAILING
-  ///   2        blank
-  ///   3…3+N-1  runner output  (N = result.output.lines().count())
-  ///   3+N      blank before hints
-  ///   4+N+…    hints (each has a header + variable content lines)
-  /// ```
-  /// When `is_warning` is true all hints are revealed and the `⚠` line
-  /// sits after a blank separator following the last hint's content.
+  /// Estimates the total content height after the reveal, then sets the
+  /// scroll offset so the last line sits at the bottom of the viewport.
   fn scroll_to_hint_line(&mut self, is_warning: bool, total_hints: usize) {
-    let output_lines = self.last_result.as_ref().map(|r| r.output.lines().count()).unwrap_or(0);
+    let area_width = self.last_width as usize;
+    let hint_width = self.last_width.saturating_sub(6) as usize;
 
-    // Base offset before any hint content:
-    //   0 = progress, 1 = status, 2 = blank, 3..3+N-1 = output, 3+N = blank before hints
+    // Pre-wrapped output line count (matches build_output_lines rendering)
+    let output_lines: usize = self
+      .last_result
+      .as_ref()
+      .map(|r| r.output.lines().map(|line| wrap_line(line, area_width).len()).sum())
+      .unwrap_or(0);
+
+    // Preamble: progress (1) + status (1) + blank (1) + N output + blank before hints (1)
     let base = 4 + output_lines;
 
-    let target = if is_warning {
-      // blank at 4+N+total_hints, ⚠ at 4+N+total_hints+1
-      5 + output_lines + total_hints
+    // Sum rendered lines for all hints currently visible.
+    let revealed = self.hints_revealed;
+    let hint_lines: usize = self
+      .current_exercise()
+      .solution_data
+      .as_ref()
+      .map(|sd| {
+        let mut t = 0;
+        for i in 0..revealed.min(sd.hints.len()) {
+          t += 1; // header
+          t += Self::hint_content_lines(&sd.hints[i], hint_width);
+        }
+        t
+      })
+      .unwrap_or(0);
+
+    // Trailer after the last hint: blank + message
+    let trailer = if is_warning {
+      3 // blank + "⚠" message + instruction
+    } else if revealed < total_hints {
+      2 // blank + "Press 'h' to reveal next hint"
     } else {
-      // hints_revealed was already incremented; the just-revealed hint
-      // has index (hints_revealed - 1).  Sum lines for all hints before it.
-      let revealed_idx = self.hints_revealed; // already incremented
-      let lines_before = self.hint_lines_before(revealed_idx.saturating_sub(1));
-      // The header line of the just-revealed hint.
-      base + lines_before
+      2 // blank + "No more hints…"
     };
 
-    self.scroll_offset = target.saturating_sub(2);
-  }
-
-  /// Compute the number of rendered lines consumed by hints 0..up_to (exclusive).
-  fn hint_lines_before(&self, up_to: usize) -> usize {
-    let hint_width = self.last_width.saturating_sub(6) as usize;
-    let exercise = self.current_exercise();
-    let Some(ref sd) = exercise.solution_data else { return 0 };
-
-    let mut total = 0;
-    for i in 0..up_to.min(sd.hints.len()) {
-      total += 1; // header line
-      total += Self::hint_content_lines(&sd.hints[i], hint_width);
-    }
-    total
+    let total_lines = base + hint_lines + trailer;
+    let vh = self.viewport_height.max(1);
+    self.scroll_offset = if total_lines > vh { total_lines - vh } else { 0 };
   }
 
   /// Number of rendered lines a single hint's body produces (after stripping
