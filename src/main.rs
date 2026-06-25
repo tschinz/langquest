@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use lq::{app, config, exercise};
+use lq::{app, config, exercise, stats};
 
 /// CLI definition for the `lq` binary.
 #[derive(Parser)]
@@ -19,6 +19,10 @@ struct Cli {
   #[arg(long)]
   reset: bool,
 
+  /// Display detailed statistics about exercise progress
+  #[arg(short = 's', long)]
+  stats: bool,
+
   #[command(subcommand)]
   command: Option<Command>,
 }
@@ -31,11 +35,14 @@ enum Command {
 }
 
 fn main() -> Result<()> {
-
   let cli = Cli::parse();
 
   if cli.reset {
     return handle_reset(cli.repo);
+  }
+
+  if cli.stats {
+    return handle_stats(cli.repo);
   }
 
   match cli.command {
@@ -90,6 +97,12 @@ fn handle_status(repo: Option<PathBuf>) -> Result<()> {
   println!("{completed}/{total} exercises completed");
 
   Ok(())
+}
+
+/// Handle the `stats` subcommand: delegate to the stats module.
+fn handle_stats(repo: Option<PathBuf>) -> Result<()> {
+  let repo_path = config::resolve_repo_path(repo.as_deref());
+  stats::run(&repo_path)
 }
 
 /// Default handler (no subcommand, no `--reset`): launch the TUI.
