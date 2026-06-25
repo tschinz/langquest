@@ -78,13 +78,13 @@ fn compute(cfg: &ProjectConfig, all_exercises: &[exercise::Exercise]) -> Report 
     stats.hints_shown += state.hints_shown;
 
     // Parse hints_max (format: "{revealed}/{total}")
-    if let Some((revealed_str, total_str)) = state.hints_max.split_once('/') {
-      if let (Ok(r), Ok(t)) = (revealed_str.parse::<usize>(), total_str.parse::<usize>()) {
-        report.hints_max_sum += r;
-        report.hints_total_sum += t;
-        stats.hints_max_sum += r;
-        stats.hints_total_sum += t;
-      }
+    if let Some((revealed_str, total_str)) = state.hints_max.split_once('/')
+      && let (Ok(r), Ok(t)) = (revealed_str.parse::<usize>(), total_str.parse::<usize>())
+    {
+      report.hints_max_sum += r;
+      report.hints_total_sum += t;
+      stats.hints_max_sum += r;
+      stats.hints_total_sum += t;
     }
 
     report.best_score_sum += state.best_score;
