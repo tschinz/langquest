@@ -509,8 +509,8 @@ reset-test:
     cargo run -- --repo {{ test_repo }} --reset
 
 # Run `lq --repo <test_repo> --reset` for quick testing
-run-test:
-    cargo run -- --repo {{ test_repo }}
+run-test args=args:
+    cargo run -- --repo {{ test_repo }} {{args}}
 
 ##################################################
 # Documentation
