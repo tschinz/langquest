@@ -21,6 +21,7 @@ A terminal-based, interactive programming exercise runner. Inspired by [Rustling
   - [Launching lq](#launching-lq)
   - [Configuration & progress files](#configuration--progress-files)
   - [Progress, identity & syncing](#progress-identity--syncing)
+  - [Teacher vs student repos (encrypted solutions)](#teacher-vs-student-repos-encrypted-solutions)
 - [Creating Your Own Exercises](#creating-your-own-exercises)
   - [File Structure](#file-structure)
   - [Exercise Contents](#exercise-contents)
@@ -191,6 +192,44 @@ Notes:
 
 See [`docs/exercise-repo.gitignore`](docs/exercise-repo.gitignore) for a ready
 `.gitignore` to drop into your exercise repository.
+
+### Teacher vs student repos (encrypted solutions)
+
+Exercise repositories can be published in two tiers:
+
+- **Teacher repo** — the source of truth. `solution/solution.md` and
+  `solution/main.*` are readable plaintext.
+- **Student repo** — a published copy where the contents of every `solution/`
+  directory are **encrypted**, so students cannot read solutions by opening the
+  files, browsing the repo on GitHub, or `grep`-ing the tree. They can still
+  reveal a solution *inside* LangQuest (which is tracked as `solution_seen`).
+
+LangQuest reads **either** form transparently — a sealed file is detected by its
+magic header and decrypted at load time — so the same binary works against both
+repos with no configuration.
+
+Seal a repository in place with:
+
+```sh
+lq seal-solutions --repo /path/to/repo   # encrypt every solution/ file (idempotent)
+```
+
+Only files under a `solution/` directory are affected; student working files,
+`02-task.md`, and `01-theory.md` are left untouched.
+
+There is deliberately **no** `unseal` command in `lq` — otherwise a student could
+bulk-decrypt every solution from their sealed repo. The teacher's private repo
+holds the plaintext solutions and is the source of truth.
+
+**Automating it.** Keep the teacher repo private and let CI publish the sealed
+student repo on every push. A ready-to-adapt GitHub Actions workflow is provided
+in [`docs/publish-student-repo.yml`](docs/publish-student-repo.yml): it installs
+`lq`, runs `lq seal-solutions`, and pushes the sealed tree to a separate student
+repository.
+
+> As with progress encryption, the sealing key is embedded in the `lq` binary,
+> so this prevents casual reading of solutions rather than defeating a determined
+> reverse-engineer.
 
 ## Creating Your Own Exercises
 
@@ -406,12 +445,14 @@ LangQuest - interactive programming exercises
 Usage: lq [OPTIONS] [COMMAND]
 
 Commands:
-  status  Print current exercise and overall progress
-  help    Print this message or the help of the given subcommand(s)
+  status          Print current exercise and overall progress
+  seal-solutions  Encrypt every `solution/` file in place (teacher → student repo, for CI)
+  help            Print this message or the help of the given subcommand(s)
 
 Options:
       --repo <REPO>  Path to exercise repository root
       --reset        Wipe all progress in lq.toml and start fresh
+  -s, --stats        Display detailed statistics about exercise progress
   -h, --help         Print help
   -V, --version      Print version
 ```
@@ -425,8 +466,14 @@ lq --repo /path/to/exercises
 # Check progress without launching TUI
 lq status
 
+# Detailed progress statistics (teachers can run this on any student repo)
+lq -s --repo /path/to/student-repo
+
 # Reset all progress (prompts for confirmation)
 lq --reset
+
+# Seal all solution/ files for the student distribution (see CI workflow in docs/)
+lq seal-solutions --repo /path/to/repo
 ```
 
 ## Dependencies

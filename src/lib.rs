@@ -13,5 +13,6 @@ pub mod error;
 pub mod exercise;
 pub mod identity;
 pub mod runner;
+pub mod solutions;
 pub mod stats;
 pub mod ui;

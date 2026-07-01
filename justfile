@@ -13,6 +13,7 @@ release := `git describe --tags --always`
 version := "0.1.0"
 url := "https://github.com/tschinz/langquest"
 test_repo := justfile_directory() / "tests" / "sample-repo"
+sealed_test_repo := justfile_directory() / "tests" / "sample-repo-sealed"
 
 # For windows shell to be supported (suppose code is multi-platforms ready)
 set shell := ["bash", "-uc"]
@@ -511,6 +512,24 @@ reset-test:
 # Run `lq --repo <test_repo> --reset` for quick testing
 run-test args=args:
     cargo run -- --repo {{ test_repo }} {{args}}
+
+# Recreate <sealed_test_repo> from <test_repo> with all solution/ files sealed
+seal-test-repo:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    rm -rf "{{ sealed_test_repo }}"
+    cp -R "{{ test_repo }}" "{{ sealed_test_repo }}"
+    # Drop any stray per-student runtime files copied from the source repo
+    find "{{ sealed_test_repo }}" \( -name '.lq.progress' -o -name '.lq.attest' \) -delete
+    cargo run --quiet -- seal-solutions --repo "{{ sealed_test_repo }}"
+
+# Open <sealed_test_repo> in lq; builds it once if missing (keeps its progress).
+# Run `just seal-test-repo` to force a fresh rebuild from <test_repo>.
+run-seal-test args=args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    [ -d "{{ sealed_test_repo }}" ] || just seal-test-repo
+    cargo run -- --repo "{{ sealed_test_repo }}" {{ args }}
 
 ##################################################
 # Documentation

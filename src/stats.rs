@@ -90,15 +90,21 @@ fn compute(cfg: &ProjectConfig, all_exercises: &[exercise::Exercise]) -> Report 
     report.hints_shown += state.hints_shown;
     stats.hints_shown += state.hints_shown;
 
-    // Parse hints_max (format: "{revealed}/{total}")
-    if let Some((revealed_str, total_str)) = state.hints_max.split_once('/')
-      && let (Ok(r), Ok(t)) = (revealed_str.parse::<usize>(), total_str.parse::<usize>())
-    {
-      report.hints_max_sum += r;
-      report.hints_total_sum += t;
-      stats.hints_max_sum += r;
-      stats.hints_total_sum += t;
-    }
+    // Total available hints come from the exercise definition (`solution.md`),
+    // so the denominator is correct even before the exercise has ever been
+    // opened (i.e. when there is no persisted progress yet). The furthest hint
+    // level *reached* comes from the numerator of the persisted `hints_max`.
+    let hints_total = ex.solution_data.as_ref().map(|s| s.hints.len()).unwrap_or(0);
+    let hints_revealed = state
+      .hints_max
+      .split_once('/')
+      .and_then(|(revealed, _)| revealed.parse::<usize>().ok())
+      .unwrap_or(0);
+
+    report.hints_total_sum += hints_total;
+    report.hints_max_sum += hints_revealed;
+    stats.hints_total_sum += hints_total;
+    stats.hints_max_sum += hints_revealed;
 
     report.best_score_sum += state.best_score;
     stats.best_score_sum += state.best_score;
@@ -183,6 +189,17 @@ mod tests {
   use std::path::PathBuf;
 
   fn make_exercise(relative_path: &str, module_name: &str) -> exercise::Exercise {
+    make_exercise_hints(relative_path, module_name, 0)
+  }
+
+  /// Build a test exercise whose `solution.md` defines `n_hints` hints.
+  fn make_exercise_hints(relative_path: &str, module_name: &str, n_hints: usize) -> exercise::Exercise {
+    let solution_data = (n_hints > 0).then(|| exercise::SolutionData {
+      title: "Test".to_string(),
+      hints: vec!["hint".to_string(); n_hints],
+      keywords: vec![],
+      explanation: String::new(),
+    });
     exercise::Exercise {
       id: "test".to_string(),
       name: "Test".to_string(),
@@ -197,7 +214,7 @@ mod tests {
       task_path: PathBuf::new(),
       source_path: PathBuf::new(),
       solution_source: None,
-      solution_data: None,
+      solution_data,
     }
   }
 
@@ -274,18 +291,31 @@ mod tests {
   }
 
   #[test]
-  fn parses_hints_max() {
+  fn revealed_from_progress_total_from_definition() {
     let mut cfg = ProjectConfig::default();
 
-    // Manually set hints_max since record_hint_reveal also increments hints_shown
+    // Furthest level reached is persisted in progress ("3/…"); the total comes
+    // from the exercise's own 5 hints, not from the progress string.
     let state = cfg.exercises.entry("ex".to_string()).or_default();
     state.hints_max = "3/5".to_string();
 
-    let exercises = vec![make_exercise("ex", "01-rust")];
+    let exercises = vec![make_exercise_hints("ex", "01-rust", 5)];
     let report = compute(&cfg, &exercises);
 
     assert_eq!(report.hints_max_sum, 3);
     assert_eq!(report.hints_total_sum, 5);
+  }
+
+  #[test]
+  fn total_shown_even_without_any_progress() {
+    // The whole point of the fix: a never-opened repo (no progress at all)
+    // still reports the correct hint total from the exercise definitions.
+    let cfg = ProjectConfig::default();
+    let exercises = vec![make_exercise_hints("ex", "01-rust", 4)];
+    let report = compute(&cfg, &exercises);
+
+    assert_eq!(report.hints_max_sum, 0);
+    assert_eq!(report.hints_total_sum, 4);
   }
 
   #[test]

@@ -12,7 +12,7 @@ use lq::{app, config, exercise, stats};
 #[command(name = "lq", version, about = "LangQuest - interactive programming exercises")]
 struct Cli {
   /// Path to exercise repository root
-  #[arg(long)]
+  #[arg(long, global = true)]
   repo: Option<PathBuf>,
 
   /// Wipe all progress in lq.toml and start fresh
@@ -32,6 +32,8 @@ struct Cli {
 enum Command {
   /// Print current exercise and overall progress
   Status,
+  /// Encrypt every `solution/` file in place (teacher → student repo, for CI)
+  SealSolutions,
 }
 
 fn main() -> Result<()> {
@@ -47,8 +49,20 @@ fn main() -> Result<()> {
 
   match cli.command {
     Some(Command::Status) => handle_status(cli.repo),
+    Some(Command::SealSolutions) => handle_seal_solutions(cli.repo),
     None => handle_default(cli.repo),
   }
+}
+
+/// Handle `seal-solutions`: encrypt every file under each `solution/` directory
+/// in the repo, in place. There is deliberately no CLI command to reverse this
+/// (students must not be able to bulk-decrypt solutions); the teacher's source
+/// repo is the plaintext of record.
+fn handle_seal_solutions(repo: Option<PathBuf>) -> Result<()> {
+  let repo_path = config::resolve_repo_path(repo.as_deref());
+  let count = lq::solutions::seal_solutions_in(&repo_path)?;
+  println!("Sealed {count} solution file(s) in {}", repo_path.display());
+  Ok(())
 }
 
 /// Handle the `--reset` flag: wipe all progress after user confirmation.

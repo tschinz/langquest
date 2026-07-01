@@ -506,9 +506,10 @@ fn render_solution_page(
   let mut solution_links: Vec<LinkSpan> = Vec::new();
   let mut content_for_hash = String::new();
 
-  // Source code from solution file
+  // Source code from solution file (decrypted transparently if the student repo
+  // ships it sealed).
   if let Some(ref solution_path) = exercise.solution_source {
-    match fs::read_to_string(solution_path) {
+    match crate::solutions::read_maybe_sealed(solution_path) {
       Ok(source) => {
         content_for_hash.push_str(&source);
         let source = source.replace("\r\n", "\n");

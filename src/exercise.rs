@@ -501,7 +501,9 @@ fn load_solution_data(exercise_dir: &Path) -> Result<Option<SolutionData>, Exerc
     return Ok(None);
   }
 
-  let content = fs::read_to_string(&solution_md).map_err(|e| ExerciseError::FileRead {
+  // Read via the solution helper so an encrypted (student-repo) solution.md is
+  // decrypted transparently; a plaintext (teacher-repo) file is returned as-is.
+  let content = crate::solutions::read_maybe_sealed(&solution_md).map_err(|e| ExerciseError::FileRead {
     path: solution_md.clone(),
     source: e,
   })?;

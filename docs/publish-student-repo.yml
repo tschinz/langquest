@@ -1,0 +1,56 @@
+# Sample CI workflow for the TEACHER exercise repository.
+#
+# On every push to the teacher repo it seals all `solution/**` files and
+# publishes the result to a separate STUDENT repository. The teacher repo stays
+# fully plaintext (source of truth); the student repo has solutions encrypted.
+#
+# Setup:
+#   1. Copy this file into the teacher repo at `.github/workflows/publish-student.yml`.
+#   2. Create a student repo (e.g. org/exercises-student).
+#   3. Add a repo secret STUDENT_REPO_TOKEN with push access to the student repo
+#      (a fine-grained PAT or deploy token).
+#   4. Adjust STUDENT_REPO below.
+
+name: Publish student repo
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: publish-student
+  cancel-in-progress: true
+
+env:
+  STUDENT_REPO: your-org/exercises-student
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout teacher repo
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      # Pin to a tag/commit in production so the sealing key is stable.
+      - name: Install lq
+        run: cargo install --git https://github.com/tschinz/langquest --locked
+
+      - name: Seal solutions in place
+        run: lq seal-solutions --repo .
+
+      - name: Publish to student repo
+        env:
+          TOKEN: ${{ secrets.STUDENT_REPO_TOKEN }}
+        run: |
+          git clone --depth 1 "https://x-access-token:${TOKEN}@github.com/${STUDENT_REPO}.git" ../student
+          # Mirror the sealed tree (excluding git metadata) into the student repo.
+          rsync -a --delete --exclude '.git' --exclude '.lq.progress' --exclude '.lq.attest' ./ ../student/
+          cd ../student
+          git config user.name  "langquest-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add -A
+          git commit -m "Sync from teacher repo (solutions sealed)" || echo "No changes"
+          git push

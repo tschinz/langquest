@@ -50,6 +50,15 @@ pub fn seal(key: &[u8; 32], plaintext: &[u8]) -> Vec<u8> {
   out
 }
 
+/// Returns `true` if `data` begins with the lq sealed-file magic marker.
+///
+/// Used to distinguish a sealed blob from plaintext without attempting to
+/// decrypt (e.g. so LangQuest can transparently read either a plaintext or an
+/// encrypted solution file).
+pub fn is_sealed(data: &[u8]) -> bool {
+  data.len() >= 4 && &data[..4] == MAGIC
+}
+
 /// Open a blob produced by [`seal`], verifying integrity and returning the
 /// plaintext.
 ///
