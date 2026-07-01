@@ -133,10 +133,7 @@ pub struct VerifyCancel {
 impl VerifyCancel {
   /// Create a cancellation token bound to `request_id`.
   pub fn new(latest_request: Arc<AtomicU64>, request_id: u64) -> Self {
-    Self {
-      latest_request,
-      request_id,
-    }
+    Self { latest_request, request_id }
   }
 
   /// Returns true when this request has been superseded.

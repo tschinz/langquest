@@ -19,7 +19,8 @@ A terminal-based, interactive programming exercise runner. Inspired by [Rustling
 - [Getting Started](#getting-started)
   - [Creating Your Exercise Repository](#creating-your-exercise-repository)
   - [Launching lq](#launching-lq)
-  - [Configuration File (lq.toml)](#configuration-file-lqtoml)
+  - [Configuration & progress files](#configuration--progress-files)
+  - [Progress, identity & syncing](#progress-identity--syncing)
 - [Creating Your Own Exercises](#creating-your-own-exercises)
   - [File Structure](#file-structure)
   - [Exercise Contents](#exercise-contents)
@@ -35,7 +36,7 @@ A terminal-based, interactive programming exercise runner. Inspired by [Rustling
 - **Progressive hints** - reveal hints one at a time; after all hints, optionally unlock the full solution
 - **Syntax-highlighted solutions** - reference code and prose explanations, gated until pass or explicit unlock
 - **Overview with tree panel** - scrollable exercise table and module/exercise tree with live progress
-- **Persistent progress** - `lq.toml` at the repo root tracks scores, pass status, and solution visibility
+- **Persistent progress** - encrypted, GitHub-account-bound `.lq.progress` file tracks scores, pass status, and solution visibility (tamper-resistant; not shareable between students)
 
 ## Installation
 
@@ -80,7 +81,9 @@ Create a new directory for your exercises. The structure follows a simple **modu
 
 ```
 my-exercises/
-├── lq.toml                      ← auto-created by lq on first run
+├── lq.toml                      ← toolchain commands (plaintext, auto-created)
+├── .lq.progress                 ← encrypted progress (auto-created; commit to sync)
+├── .lq.attest                   ← machine-bound identity cache (git-ignore this)
 ├── 01-basics/                   ← module (prefixed with NN-)
 │   ├── 01-hello-world/          ← exercise (prefixed with NN-)
 │   │   ├── 01-theory.md
@@ -111,30 +114,83 @@ cd /path/to/my-exercises
 lq
 ```
 
-### Configuration File (lq.toml)
+### Configuration & progress files
 
-`lq` creates and manages `lq.toml` at the root of your exercise repository. This file tracks all progress:
+`lq` manages three files at the root of your exercise repository, split by purpose:
+
+| File | Contents | Format | Commit? |
+| --- | --- | --- | --- |
+| `lq.toml` | Toolchain commands (`rust.cmd`, `python.cmd`, …) | Plaintext TOML | Yes — shareable |
+| `.lq.progress` | Scores, pass state, hints, current exercise | **Encrypted**, identity-bound | Yes — see syncing below |
+| `.lq.attest` | Machine-bound proof of your last online identity check | **Encrypted** | **No — never commit** |
+
+`lq.toml` is the only hand-editable file; it holds no progress and is safe to
+customise:
 
 ```toml
-current_exercise = "01-basics/02-variables"
+[rust]
+cmd = "rustc --edition 2024 --test <file> -o <out>"
 
-[exercises."01-basics/01-hello-world"]
-best_score    = 1.0
-passed        = true
-solution_seen = true
+[python]
+cmd = "python3 -m pytest <file> --tb=short -q"
 
-[exercises."01-basics/02-variables"]
-best_score    = 0.6
-passed        = false
-solution_seen = false
+[ripes]
+bin = "/Applications/Ripes.app/Contents/MacOS/Ripes"
+cmd = "ripes --mode cli -t asm --proc RV32_SS --json --src <file>"
 ```
 
-**Persistence rules:**
+**Persistence rules (progress):**
 - `best_score` only increases - lower scores never overwrite higher ones
 - `passed` becomes `true` when `score >= threshold` and never resets
 - `solution_seen` becomes `true` on first Solution page visit and never resets
 
-You can commit `lq.toml` to share progress across machines, or add it to `.gitignore` for single-user use.
+### Progress, identity & syncing
+
+Progress lives in the encrypted `.lq.progress` file, not in `lq.toml`, so it
+**cannot be edited by hand** — tampering fails an integrity check and `lq`
+refuses to start. Progress is also **bound to your GitHub account** (via the
+`gh` CLI): it will not open under a different account, so a solved file cannot be
+shared between students.
+
+- **First launch requires internet** (and `gh auth login`) once, to bind your
+  progress to your GitHub identity.
+- **Offline afterwards works** via a machine-bound attestation cached on each
+  machine's first online launch (valid for 30 days).
+
+**For teachers — reading progress.** The read-only commands `lq -s` (stats) and
+`lq status` are **not** identity-gated: you can run them against any student's
+repository to inspect their progress. Both print the **bound owner**
+(`Owner: <login> (GitHub #<id>)`) decrypted from the tamper-proof file, so you
+can confirm the progress belongs to the expected student. Because the owner is
+sealed inside the encrypted blob, a student who copies a classmate's solved
+`.lq.progress` into their own repo will still show the *classmate's* owner — the
+swap is immediately visible. Doing exercises (the interactive TUI) remains bound
+to the student's own GitHub account, so a copied file cannot be continued as
+one's own.
+
+**Using multiple machines** (e.g. home PC + school laptop): because progress is
+bound to your GitHub *account* — not the machine — you can work on any machine
+signed into the same account. Since each student works in **their own fork**,
+the clean way to sync is to commit `.lq.progress`:
+
+```sh
+# End of a session
+git add .lq.progress && git commit -m "progress" && git push
+# Start of the next session, on the other machine
+git pull
+```
+
+Notes:
+- Add `.lq.attest` to your exercise repo's `.gitignore` — it is machine-specific
+  and each machine regenerates its own; never commit it.
+- `.lq.progress` is an encrypted binary blob, so git cannot *merge* two versions.
+  Always **pull before** a session and **push after** to avoid conflicts from
+  working on both machines at once.
+- Committing `.lq.progress` is safe even in a public fork: it is encrypted and
+  account-bound, so nobody can read your scores or reuse the file.
+
+See [`docs/exercise-repo.gitignore`](docs/exercise-repo.gitignore) for a ready
+`.gitignore` to drop into your exercise repository.
 
 ## Creating Your Own Exercises
 

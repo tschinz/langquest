@@ -26,6 +26,11 @@ pub struct PerModuleStats {
 /// Aggregated statistics report.
 #[derive(Debug, Default, PartialEq)]
 pub struct Report {
+  /// GitHub identity the progress is bound to, decrypted from the tamper-proof
+  /// progress file. Lets a teacher confirm the progress actually belongs to the
+  /// student whose repo this is (a swapped file shows a different owner).
+  /// `None` when progress has never been bound (no online launch yet).
+  pub owner: Option<crate::identity::GithubIdentity>,
   pub total_exercises: usize,
   pub completed: usize,
   pub solutions_seen: usize,
@@ -41,6 +46,11 @@ pub struct Report {
 pub fn run(repo_path: &Path) -> Result<()> {
   let cfg_path = config::config_path(repo_path);
   let cfg = ProjectConfig::load(&cfg_path)?;
+
+  // Reading is open (teachers/anyone may inspect progress); the identity gate is
+  // enforced on the write paths (TUI / reset). The bound owner is decrypted from
+  // the tamper-proof blob and shown below so a swapped file reveals its true
+  // owner.
   let (_tree, all_exercises, _errors) = exercise::discover_exercises(repo_path);
 
   let report = compute(&cfg, &all_exercises);
@@ -51,7 +61,10 @@ pub fn run(repo_path: &Path) -> Result<()> {
 
 /// Compute aggregated statistics from the project config and exercise list.
 fn compute(cfg: &ProjectConfig, all_exercises: &[exercise::Exercise]) -> Report {
-  let mut report = Report::default();
+  let mut report = Report {
+    owner: cfg.owner.clone(),
+    ..Default::default()
+  };
 
   for ex in all_exercises {
     let state = cfg.get_state(&ex.relative_path);
@@ -101,6 +114,14 @@ fn render(report: &Report) {
   println!("═══════════════════════════════════════");
   println!("         LangQuest Stats");
   println!("═══════════════════════════════════════");
+
+  // Owner identity — decrypted from the progress file so a teacher can verify
+  // the progress belongs to the expected student.
+  println!();
+  match &report.owner {
+    Some(o) => println!("  Owner: {} (GitHub #{})", o.login, o.id),
+    None => println!("  Owner: (unverified — no GitHub identity bound yet)"),
+  }
 
   // Overall summary
   println!();
@@ -359,5 +380,33 @@ mod tests {
     assert!((pct(3, 4) - 75.0).abs() < f64::EPSILON);
     assert!((pct(0, 5) - 0.0).abs() < f64::EPSILON);
     assert!((pct(5, 5) - 100.0).abs() < f64::EPSILON);
+  }
+
+  #[test]
+  fn report_carries_bound_owner_for_grading() {
+    // A teacher reads a student's stats; the owner must surface so a swapped
+    // file (bound to a different account) is detectable.
+    let mut cfg = ProjectConfig {
+      owner: Some(crate::identity::GithubIdentity {
+        id: 4242,
+        login: "student-alice".to_string(),
+      }),
+      ..Default::default()
+    };
+    cfg.update_score("01-rust/01-hello", 1.0, 0.7);
+
+    let exercises = vec![make_exercise("01-rust/01-hello", "01-rust")];
+    let report = compute(&cfg, &exercises);
+
+    let owner = report.owner.expect("owner should be reported");
+    assert_eq!(owner.id, 4242);
+    assert_eq!(owner.login, "student-alice");
+  }
+
+  #[test]
+  fn report_owner_is_none_when_unbound() {
+    let cfg = ProjectConfig::default();
+    let report = compute(&cfg, &[]);
+    assert!(report.owner.is_none());
   }
 }

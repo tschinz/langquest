@@ -28,3 +28,9 @@ Cargo.lock
 security-report.json
 trivy-results.sarif
 supply-chain-report.json
+
+# Machine-bound attestation — never commit (regenerated per machine).
+# The encrypted progress file `.lq.progress` is intentionally NOT ignored: it is
+# written into the *exercise* repo and should be TRACKED there so it syncs across
+# a student's machines — see README "Progress, identity & syncing".
+.lq.attest

@@ -21,6 +21,15 @@ pub enum ConfigError {
   /// Failed to write the config file to disk.
   #[error("failed to write config file {path}: {source}")]
   Write { path: PathBuf, source: std::io::Error },
+
+  /// The encrypted progress file failed its integrity check (tampered with,
+  /// truncated, or sealed with a different key).
+  #[error("progress file {path} is corrupt or has been tampered with: {source}")]
+  Decrypt { path: PathBuf, source: crate::crypto::CryptoError },
+
+  /// The decrypted progress payload could not be parsed.
+  #[error("failed to parse decrypted progress file {path}: {source}")]
+  ProgressParse { path: PathBuf, source: serde_json::Error },
 }
 
 /// Errors related to exercise discovery and parsing.

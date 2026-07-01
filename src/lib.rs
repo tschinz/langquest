@@ -8,8 +8,10 @@
 
 pub mod app;
 pub mod config;
+pub mod crypto;
 pub mod error;
 pub mod exercise;
+pub mod identity;
 pub mod runner;
 pub mod stats;
 pub mod ui;

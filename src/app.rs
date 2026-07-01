@@ -182,7 +182,12 @@ impl App {
     }
 
     let cfg_path = config::config_path(&repo_path);
-    let config = ProjectConfig::load(&cfg_path)?;
+    let mut config = ProjectConfig::load(&cfg_path)?;
+
+    // Enforce GitHub-identity binding (online, with offline attestation
+    // fallback) before exposing any progress. Records the bound owner.
+    let owner = crate::identity::authorize(&repo_path, config.owner.clone()).map_err(|reason| anyhow::anyhow!("progress locked: {reason}"))?;
+    config.owner = Some(owner);
 
     // Resolve starting index from config.current_exercise.
     let current_index = config

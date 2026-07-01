@@ -7,6 +7,13 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::error::ConfigError;
+use crate::identity::GithubIdentity;
+
+/// Embedded key used to seal the on-disk progress file.
+const PROGRESS_KEY: [u8; 32] = *b"lq-progress-key-v1-do-not-share!";
+
+/// Filename of the encrypted progress file, stored alongside `lq.toml`.
+pub const PROGRESS_FILE: &str = ".lq.progress";
 
 /// State tracking for a single exercise.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -147,13 +154,51 @@ impl Default for CppConfig {
   }
 }
 
-/// Top-level project configuration, persisted as `lq.toml`.
+/// Plaintext, hand-editable toolchain commands, persisted as `lq.toml`.
+///
+/// These are safe for students to see and tweak; they contain no progress.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct CommandsFile {
+  #[serde(default)]
+  rust: RustConfig,
+  #[serde(default)]
+  python: PythonConfig,
+  #[serde(default)]
+  go: GoConfig,
+  #[serde(default)]
+  cpp: CppConfig,
+  #[serde(default)]
+  ripes: RipesConfig,
+}
+
+/// Cheat-sensitive progress, serialized then AEAD-encrypted into
+/// [`PROGRESS_FILE`]. Never written in plaintext.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct ProgressFile {
+  /// GitHub identity this progress is bound to (set on first online launch).
+  #[serde(default)]
+  owner: Option<GithubIdentity>,
+  current_exercise: Option<String>,
+  #[serde(default)]
+  exercises: BTreeMap<String, ExerciseState>,
+}
+
+/// Top-level project configuration.
+///
+/// In memory this aggregates both the plaintext toolchain commands (persisted
+/// to `lq.toml`) and the encrypted progress (persisted to [`PROGRESS_FILE`]).
+/// [`load`](ProjectConfig::load) / [`save`](ProjectConfig::save) transparently
+/// split across the two files.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ProjectConfig {
+  /// GitHub identity the progress is bound to. Populated by
+  /// [`crate::identity::authorize`] on first successful verification.
+  #[serde(default)]
+  pub owner: Option<GithubIdentity>,
   /// Relative path of the current exercise (e.g. `"01-basics/01-hello-world"`).
   pub current_exercise: Option<String>,
   /// Per-exercise state, keyed by relative path. Uses `BTreeMap` for sorted,
-  /// deterministic TOML output.
+  /// deterministic output.
   pub exercises: BTreeMap<String, ExerciseState>,
   /// Rust toolchain settings.  Written to `lq.toml` on first save so the
   /// user can customise the command without recompiling.
@@ -178,17 +223,57 @@ pub struct ProjectConfig {
 }
 
 impl ProjectConfig {
-  /// Load a `ProjectConfig` from the TOML file at `path`.
+  /// Load a `ProjectConfig`, reading plaintext commands from the `lq.toml`
+  /// file at `path` and the encrypted progress from the sibling
+  /// [`PROGRESS_FILE`].
   ///
-  /// Returns `Ok(Self::default())` if the file does not exist.
-  /// Maps I/O errors to [`ConfigError::Read`] and parse errors to
-  /// [`ConfigError::Parse`].
+  /// Missing files yield defaults. TOML parse errors map to
+  /// [`ConfigError::Parse`]; a tampered/corrupt progress file maps to
+  /// [`ConfigError::Decrypt`]. Identity binding is enforced separately by
+  /// [`crate::identity::authorize`], not here.
   pub fn load(path: &Path) -> Result<Self, ConfigError> {
+    let commands = Self::load_commands(path)?;
+    let progress = Self::load_progress(&progress_path(path))?;
+
+    Ok(ProjectConfig {
+      owner: progress.owner,
+      current_exercise: progress.current_exercise,
+      exercises: progress.exercises,
+      rust: commands.rust,
+      python: commands.python,
+      go: commands.go,
+      cpp: commands.cpp,
+      ripes: commands.ripes,
+    })
+  }
+
+  /// Like [`load`](Self::load) but tolerant of a corrupt/tampered progress
+  /// file: on a decrypt or parse failure the progress falls back to default
+  /// instead of erroring.
+  ///
+  /// Used by `--reset`, which wipes progress anyway, so a student whose
+  /// progress file got corrupted is never locked out of recovering.
+  pub fn load_lenient(path: &Path) -> Result<Self, ConfigError> {
+    let commands = Self::load_commands(path)?;
+    let progress = Self::load_progress(&progress_path(path)).unwrap_or_default();
+
+    Ok(ProjectConfig {
+      owner: progress.owner,
+      current_exercise: progress.current_exercise,
+      exercises: progress.exercises,
+      rust: commands.rust,
+      python: commands.python,
+      go: commands.go,
+      cpp: commands.cpp,
+      ripes: commands.ripes,
+    })
+  }
+
+  /// Read and parse the plaintext `lq.toml` commands file.
+  fn load_commands(path: &Path) -> Result<CommandsFile, ConfigError> {
     let contents = match fs::read_to_string(path) {
       Ok(s) => s,
-      Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-        return Ok(Self::default());
-      }
+      Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(CommandsFile::default()),
       Err(e) => {
         return Err(ConfigError::Read {
           path: path.to_path_buf(),
@@ -203,17 +288,60 @@ impl ProjectConfig {
     })
   }
 
-  /// Serialize this config to TOML and write it to `path`.
-  ///
-  /// Maps serialization errors to [`ConfigError::Serialize`] and I/O errors
-  /// to [`ConfigError::Write`].
-  pub fn save(&self, path: &Path) -> Result<(), ConfigError> {
-    let contents = toml::to_string(self).map_err(|e| ConfigError::Serialize { source: e })?;
+  /// Read, decrypt, and parse the encrypted progress file.
+  fn load_progress(path: &Path) -> Result<ProgressFile, ConfigError> {
+    let data = match fs::read(path) {
+      Ok(d) => d,
+      Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(ProgressFile::default()),
+      Err(e) => {
+        return Err(ConfigError::Read {
+          path: path.to_path_buf(),
+          source: e,
+        });
+      }
+    };
 
-    fs::write(path, contents).map_err(|e| ConfigError::Write {
+    let plain = crate::crypto::open(&PROGRESS_KEY, &data).map_err(|e| ConfigError::Decrypt {
+      path: path.to_path_buf(),
+      source: e,
+    })?;
+
+    serde_json::from_slice(&plain).map_err(|e| ConfigError::ProgressParse {
       path: path.to_path_buf(),
       source: e,
     })
+  }
+
+  /// Write plaintext commands to `lq.toml` (`path`) and the encrypted progress
+  /// to the sibling [`PROGRESS_FILE`].
+  ///
+  /// Maps serialization errors to [`ConfigError::Serialize`] and I/O errors to
+  /// [`ConfigError::Write`].
+  pub fn save(&self, path: &Path) -> Result<(), ConfigError> {
+    // Plaintext commands -> lq.toml
+    let commands = CommandsFile {
+      rust: self.rust.clone(),
+      python: self.python.clone(),
+      go: self.go.clone(),
+      cpp: self.cpp.clone(),
+      ripes: self.ripes.clone(),
+    };
+    let contents = toml::to_string(&commands).map_err(|e| ConfigError::Serialize { source: e })?;
+    fs::write(path, contents).map_err(|e| ConfigError::Write {
+      path: path.to_path_buf(),
+      source: e,
+    })?;
+
+    // Encrypted progress -> .lq.progress
+    let progress = ProgressFile {
+      owner: self.owner.clone(),
+      current_exercise: self.current_exercise.clone(),
+      exercises: self.exercises.clone(),
+    };
+    let plain = serde_json::to_vec(&progress).expect("progress serialises");
+    let sealed = crate::crypto::seal(&PROGRESS_KEY, &plain);
+    let ppath = progress_path(path);
+    fs::write(&ppath, sealed).map_err(|e| ConfigError::Write { path: ppath, source: e })
   }
 
   /// Return the [`ExerciseState`] for the given exercise path, or a default
@@ -301,6 +429,13 @@ pub fn resolve_repo_path(cli_repo: Option<&Path>) -> PathBuf {
 /// Return the path to the `lq.toml` config file within the given repo root.
 pub fn config_path(repo_root: &Path) -> PathBuf {
   repo_root.join("lq.toml")
+}
+
+/// Return the path to the encrypted progress file, given the `lq.toml` path.
+///
+/// The progress file lives in the same directory as `lq.toml`.
+pub fn progress_path(config_path: &Path) -> PathBuf {
+  config_path.parent().unwrap_or_else(|| Path::new(".")).join(PROGRESS_FILE)
 }
 
 #[cfg(test)]

@@ -68,7 +68,14 @@ fn handle_reset(repo: Option<PathBuf>) -> Result<()> {
   }
 
   let cfg_path = config::config_path(&repo_path);
-  let mut cfg = config::ProjectConfig::load(&cfg_path)?;
+  // Tolerate a corrupt progress file here: reset wipes it anyway, so a student
+  // with a damaged file must still be able to recover.
+  let mut cfg = config::ProjectConfig::load_lenient(&cfg_path)?;
+
+  // Only the bound owner may reset their progress.
+  let owner = lq::identity::authorize(&repo_path, cfg.owner.clone()).map_err(|reason| anyhow::anyhow!("progress locked: {reason}"))?;
+  cfg.owner = Some(owner);
+
   let (_tree, all_exercises, _errors) = exercise::discover_exercises(&repo_path);
 
   let first_exercise = all_exercises.first().map(|e| e.relative_path.as_str());
@@ -84,7 +91,15 @@ fn handle_status(repo: Option<PathBuf>) -> Result<()> {
   let repo_path = config::resolve_repo_path(repo.as_deref());
   let cfg_path = config::config_path(&repo_path);
   let cfg = config::ProjectConfig::load(&cfg_path)?;
+
+  // Reading is open (teachers/anyone may inspect); identity is enforced only on
+  // the write paths. Show the bound owner so a swapped file reveals its owner.
   let (_tree, all_exercises, _errors) = exercise::discover_exercises(&repo_path);
+
+  match &cfg.owner {
+    Some(o) => println!("Owner: {} (GitHub #{})", o.login, o.id),
+    None => println!("Owner: (unverified — no GitHub identity bound yet)"),
+  }
 
   match &cfg.current_exercise {
     Some(name) => println!("Current exercise: {name}"),

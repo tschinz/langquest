@@ -509,7 +509,11 @@ mod runner {
     let hello = all_exercises.iter().find(|e| e.id == "hello_go");
 
     if let Some(exercise) = hello {
-      let result = lq::runner::verify(exercise, &lq::config::ProjectConfig::default());
+      let result = lq::runner::verify(
+        exercise,
+        &lq::config::ProjectConfig::default(),
+        &lq::runner::VerifyCancel::new(std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)), 0),
+      );
       // The starter returns "" so tests should fail - we only verify the
       // runner doesn't panic and produces a well-formed result.
       assert!(result.threshold > 0.0);
@@ -523,7 +527,11 @@ mod runner {
     let hello = all_exercises.iter().find(|e| e.id == "hello_cpp");
 
     if let Some(exercise) = hello {
-      let result = lq::runner::verify(exercise, &lq::config::ProjectConfig::default());
+      let result = lq::runner::verify(
+        exercise,
+        &lq::config::ProjectConfig::default(),
+        &lq::runner::VerifyCancel::new(std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)), 0),
+      );
       // The starter returns "" so tests should fail - we only verify the
       // runner doesn't panic and produces a well-formed result.
       assert!(result.threshold > 0.0);
@@ -550,7 +558,11 @@ mod runner {
     // Copy the reference solution into place
     fs::copy(&solution, &starter).expect("copy solution");
 
-    let result = lq::runner::verify(exercise, &lq::config::ProjectConfig::default());
+    let result = lq::runner::verify(
+      exercise,
+      &lq::config::ProjectConfig::default(),
+      &lq::runner::VerifyCancel::new(std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)), 0),
+    );
 
     // Restore the starter before any assertions (so we don't leave the
     // fixture dirty on failure).
@@ -571,7 +583,11 @@ mod runner {
     let hello = all_exercises.iter().find(|e| e.id == "hello_world");
 
     if let Some(exercise) = hello {
-      let result = lq::runner::verify(exercise, &lq::config::ProjectConfig::default());
+      let result = lq::runner::verify(
+        exercise,
+        &lq::config::ProjectConfig::default(),
+        &lq::runner::VerifyCancel::new(std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)), 0),
+      );
       // The starter code has `todo!()` stubs, so tests should fail.
       // We just verify the runner doesn't panic and returns a result.
       assert!(result.threshold > 0.0);
@@ -588,7 +604,11 @@ mod runner {
 
     if let Some(exercise) = concept {
       assert_eq!(exercise.language, lq::exercise::Language::Text);
-      let result = lq::runner::verify(exercise, &lq::config::ProjectConfig::default());
+      let result = lq::runner::verify(
+        exercise,
+        &lq::config::ProjectConfig::default(),
+        &lq::runner::VerifyCancel::new(std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)), 0),
+      );
       // The starter has empty answer placeholders, so score should be low.
       assert!(result.threshold > 0.0);
       // Markdown exercises have keyword-based scoring.

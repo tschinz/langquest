@@ -1,0 +1,25 @@
+# .gitignore template for a LangQuest exercise repository.
+# Copy this to the root of your exercise repo (rename to `.gitignore`).
+
+# Machine-bound identity attestation — specific to each machine and regenerated
+# on that machine's first online launch. NEVER commit it.
+.lq.attest
+
+# NOTE: do NOT ignore `.lq.progress`.
+# It holds your encrypted, GitHub-account-bound progress. Committing it is how
+# you sync progress across your machines (home PC, school laptop, …):
+#
+#   git add .lq.progress && git commit -m "progress" && git push   # after a session
+#   git pull                                                        # before the next
+#
+# It is encrypted and account-bound, so it is safe to commit even in a public
+# fork — nobody else can read your scores or reuse the file. Because it is a
+# binary blob git cannot merge two versions, so always pull before and push
+# after a session if you use more than one machine.
+
+# Compiled test binaries / build artifacts produced while verifying exercises.
+*.o
+*.out
+a.out
+target/
+__pycache__/
