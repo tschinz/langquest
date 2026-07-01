@@ -720,10 +720,13 @@ impl App {
       self.hints_revealed += 1;
       self.solution_unlock_pending = false;
 
-      // Persist hint progress (cumulative counter + furthest level reached).
+      // Persist hint progress (cumulative counter + furthest level reached),
+      // but only while the exercise is unsolved: once passed, revealing hints
+      // for study is free and does not count. The hint still displays either way.
       let path = self.current_exercise().relative_path.clone();
-      self.config.record_hint_reveal(&path, self.hints_revealed, total);
-      self.save_config();
+      if self.config.record_hint_reveal_if_unpassed(&path, self.hints_revealed, total) {
+        self.save_config();
+      }
 
       self.scroll_to_hint_line(false);
     } else if !self.solution_unlock_pending {

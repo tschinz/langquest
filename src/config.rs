@@ -420,6 +420,18 @@ impl ProjectConfig {
     }
   }
 
+  /// Record a hint reveal, but only if the exercise has **not** been passed.
+  ///
+  /// Once an exercise is solved, revealing hints for study is "free" and does
+  /// not increase its hint counters. Returns `true` if the reveal was recorded.
+  pub fn record_hint_reveal_if_unpassed(&mut self, exercise_path: &str, hints_revealed: usize, hints_total: usize) -> bool {
+    if self.get_state(exercise_path).passed {
+      return false;
+    }
+    self.record_hint_reveal(exercise_path, hints_revealed, hints_total);
+    true
+  }
+
   /// Reset all exercise state and optionally set the current exercise to
   /// `first_exercise`.
   pub fn reset(&mut self, first_exercise: Option<&str>) {
@@ -572,6 +584,23 @@ mod tests {
     cfg.update_score("passed-ex", 1.0, 0.7);
     assert!(!cfg.mark_solution_seen_if_unpassed("passed-ex"));
     assert!(!cfg.get_state("passed-ex").solution_seen);
+  }
+
+  #[test]
+  fn record_hint_reveal_if_unpassed_stops_counting_after_pass() {
+    let mut cfg = ProjectConfig::default();
+
+    // Before passing: reveals are counted.
+    assert!(cfg.record_hint_reveal_if_unpassed("ex", 1, 5));
+    assert!(cfg.record_hint_reveal_if_unpassed("ex", 2, 5));
+    assert_eq!(cfg.get_state("ex").hints_shown, 2);
+    assert_eq!(cfg.get_state("ex").hints_max, "2/5");
+
+    // After passing: further reveals do not increase the counters.
+    cfg.update_score("ex", 1.0, 0.7);
+    assert!(!cfg.record_hint_reveal_if_unpassed("ex", 3, 5));
+    assert_eq!(cfg.get_state("ex").hints_shown, 2);
+    assert_eq!(cfg.get_state("ex").hints_max, "2/5");
   }
 
   #[test]
