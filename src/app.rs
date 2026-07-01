@@ -270,13 +270,7 @@ impl App {
   pub fn status_at(&self, index: usize) -> ExerciseStatus {
     let exercise = self.exercise_at(index);
     let state = self.config.get_state(&exercise.relative_path);
-    if state.passed && state.solution_seen {
-      ExerciseStatus::Complete
-    } else if state.passed {
-      ExerciseStatus::Partial
-    } else {
-      ExerciseStatus::Failing
-    }
+    if state.passed { ExerciseStatus::Complete } else { ExerciseStatus::Failing }
   }
 
   /// Switch to a new exercise by index, updating all related state.
@@ -968,10 +962,14 @@ impl App {
   }
 
   /// Mark the current exercise's solution as seen and persist.
+  ///
+  /// No-op once the exercise is passed: a student who has already solved it can
+  /// view the reference solution without it counting against them.
   fn mark_current_solution_seen(&mut self) {
     let path = self.current_exercise().relative_path.clone();
-    self.config.mark_solution_seen(&path);
-    self.save_config();
+    if self.config.mark_solution_seen_if_unpassed(&path) {
+      self.save_config();
+    }
   }
 
   /// Dispatch rendering to the appropriate UI module based on the current

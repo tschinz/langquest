@@ -646,7 +646,8 @@ mod status {
   }
 
   #[test]
-  fn partial_when_passed_but_not_seen() {
+  fn complete_when_passed_without_viewing_solution() {
+    // Passing completes the exercise; viewing the solution is optional.
     let state = lq::config::ExerciseState {
       best_score: 1.0,
       passed: true,
@@ -655,7 +656,7 @@ mod status {
       hints_max: String::new(),
     };
     let status = lq::ui::overview::derive_status(&state);
-    assert_eq!(status, lq::exercise::ExerciseStatus::Partial);
+    assert_eq!(status, lq::exercise::ExerciseStatus::Complete);
   }
 
   #[test]

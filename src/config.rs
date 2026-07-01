@@ -375,6 +375,19 @@ impl ProjectConfig {
     state.solution_seen = true;
   }
 
+  /// Mark the solution as seen only if the exercise has **not** been passed.
+  ///
+  /// Viewing the reference solution after already passing all tests is "free":
+  /// a student who has solved the exercise may study the solution without being
+  /// recorded as having needed it. Returns `true` if the flag was newly set.
+  pub fn mark_solution_seen_if_unpassed(&mut self, exercise_path: &str) -> bool {
+    if self.get_state(exercise_path).passed {
+      return false;
+    }
+    self.mark_solution_seen(exercise_path);
+    true
+  }
+
   /// Ensure `hints_max` is initialised to `"0/{hints_total}"` when it is
   /// still empty (e.g. for a freshly discovered exercise).  No-op once the
   /// field already has a value.
@@ -545,6 +558,20 @@ mod tests {
     let mut cfg = ProjectConfig::default();
     cfg.mark_solution_seen("ex");
     assert!(cfg.get_state("ex").solution_seen);
+  }
+
+  #[test]
+  fn mark_solution_seen_if_unpassed_records_only_before_passing() {
+    let mut cfg = ProjectConfig::default();
+
+    // Not yet passed: viewing the solution is recorded (student needed help).
+    assert!(cfg.mark_solution_seen_if_unpassed("ex"));
+    assert!(cfg.get_state("ex").solution_seen);
+
+    // Once passed, a fresh exercise's post-pass view is NOT recorded.
+    cfg.update_score("passed-ex", 1.0, 0.7);
+    assert!(!cfg.mark_solution_seen_if_unpassed("passed-ex"));
+    assert!(!cfg.get_state("passed-ex").solution_seen);
   }
 
   #[test]

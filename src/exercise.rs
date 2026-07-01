@@ -129,9 +129,10 @@ impl Language {
 pub enum ExerciseStatus {
   /// Below threshold - keep working.
   Failing,
-  /// Threshold reached or previously passed, but solution not yet viewed.
+  /// Group-level only: some but not all exercises under a module are passed.
   Partial,
-  /// Passed **and** solution viewed - fully complete.
+  /// Passed - complete. Viewing the reference solution is optional and does not
+  /// affect completion.
   Complete,
 }
 

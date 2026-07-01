@@ -22,29 +22,27 @@ use crate::exercise::{Exercise, ExerciseStatus, TreeNode};
 
 /// Derive an [`ExerciseStatus`] from persisted [`crate::config::ExerciseState`].
 ///
-/// * `passed && solution_seen` → [`ExerciseStatus::Complete`]
-/// * `passed` → [`ExerciseStatus::Partial`]
+/// An exercise is complete once all its tests pass; viewing the reference
+/// solution is optional and does not affect completion.
+///
+/// * `passed` → [`ExerciseStatus::Complete`]
 /// * otherwise → [`ExerciseStatus::Failing`]
 pub fn derive_status(state: &crate::config::ExerciseState) -> ExerciseStatus {
-  if state.passed && state.solution_seen {
-    ExerciseStatus::Complete
-  } else if state.passed {
-    ExerciseStatus::Partial
-  } else {
-    ExerciseStatus::Failing
-  }
+  if state.passed { ExerciseStatus::Complete } else { ExerciseStatus::Failing }
 }
 
 /// Compute the aggregate [`ExerciseStatus`] for all exercises under `node`.
+///
+/// A group is complete when every exercise under it is passed, partial when some
+/// (but not all) are passed, and failing otherwise.
 fn group_status(node: &TreeNode, config: &ProjectConfig) -> ExerciseStatus {
   let mut total = 0usize;
   let mut passed = 0usize;
-  let mut seen = 0usize;
-  count_group_exercises(node, config, &mut total, &mut passed, &mut seen);
+  count_group_exercises(node, config, &mut total, &mut passed);
   if total == 0 {
     return ExerciseStatus::Failing;
   }
-  if seen == total {
+  if passed == total {
     ExerciseStatus::Complete
   } else if passed > 0 {
     ExerciseStatus::Partial
@@ -53,8 +51,8 @@ fn group_status(node: &TreeNode, config: &ProjectConfig) -> ExerciseStatus {
   }
 }
 
-/// Recursively count exercises and their states under `node`.
-fn count_group_exercises(node: &TreeNode, config: &ProjectConfig, total: &mut usize, passed: &mut usize, seen: &mut usize) {
+/// Recursively count exercises and how many are passed under `node`.
+fn count_group_exercises(node: &TreeNode, config: &ProjectConfig, total: &mut usize, passed: &mut usize) {
   for child in &node.children {
     if let Some(ex) = &child.exercise {
       *total += 1;
@@ -62,11 +60,8 @@ fn count_group_exercises(node: &TreeNode, config: &ProjectConfig, total: &mut us
       if state.passed {
         *passed += 1;
       }
-      if state.solution_seen {
-        *seen += 1;
-      }
     } else {
-      count_group_exercises(child, config, total, passed, seen);
+      count_group_exercises(child, config, total, passed);
     }
   }
 }
@@ -503,7 +498,8 @@ mod tests {
   }
 
   #[test]
-  fn derive_status_partial() {
+  fn derive_status_passed_is_complete_without_viewing_solution() {
+    // Passing completes the exercise; viewing the solution is optional.
     let state = ExerciseState {
       best_score: 1.0,
       passed: true,
@@ -511,7 +507,7 @@ mod tests {
       hints_shown: 0,
       hints_max: String::new(),
     };
-    assert_eq!(derive_status(&state), ExerciseStatus::Partial);
+    assert_eq!(derive_status(&state), ExerciseStatus::Complete);
   }
 
   #[test]
