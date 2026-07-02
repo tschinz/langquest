@@ -34,6 +34,14 @@ pub struct ExerciseState {
   /// the second is the total number of hints for this exercise.
   #[serde(default, skip_serializing_if = "String::is_empty")]
   pub hints_max: String,
+  /// Total number of unit tests / checks in this exercise, from the most recent
+  /// verification (0 until first verified).
+  #[serde(default)]
+  pub tests_total: usize,
+  /// Number of tests / checks that passed at the [`best_score`](Self::best_score).
+  /// Enables partial-credit grading ("almost finished" exercises).
+  #[serde(default)]
+  pub best_tests_passed: usize,
 }
 
 impl Default for ExerciseState {
@@ -44,6 +52,8 @@ impl Default for ExerciseState {
       solution_seen: false,
       hints_shown: 0,
       hints_max: String::new(),
+      tests_total: 0,
+      best_tests_passed: 0,
     }
   }
 }
@@ -350,15 +360,35 @@ impl ProjectConfig {
     self.exercises.get(exercise_path).cloned().unwrap_or_default()
   }
 
-  /// Update the score for an exercise.
+  /// Update the score for an exercise (without test-count details).
   ///
   /// - `best_score` is only updated if `score` is strictly higher (monotonic increase).
   /// - `passed` is set to `true` when `score >= threshold` and is sticky (never reset).
   pub fn update_score(&mut self, exercise_path: &str, score: f64, threshold: f64) {
+    self.record_verification(exercise_path, score, threshold, 0, 0);
+  }
+
+  /// Record a full verification result, including unit-test counts.
+  ///
+  /// Behaves like [`update_score`](Self::update_score) for `best_score` /
+  /// `passed`, and additionally:
+  /// - stores `tests_total` whenever it is known (`> 0`), since it is a fixed
+  ///   property of the exercise;
+  /// - records `best_tests_passed` alongside a new best score, so the persisted
+  ///   pass count always corresponds to the best score (partial-credit grading).
+  pub fn record_verification(&mut self, exercise_path: &str, score: f64, threshold: f64, tests_passed: usize, tests_total: usize) {
     let state = self.exercises.entry(exercise_path.to_owned()).or_default();
 
     if score > state.best_score {
       state.best_score = score;
+      state.best_tests_passed = tests_passed;
+    }
+
+    // The total is a stable property of the exercise; keep it current whenever
+    // a verification actually ran (avoids clobbering a known total with 0 from
+    // the count-less `update_score` path).
+    if tests_total > 0 {
+      state.tests_total = tests_total;
     }
 
     if score >= threshold {
@@ -552,6 +582,34 @@ mod tests {
     cfg.update_score("ex", 0.9, 0.7);
     assert_eq!(cfg.get_state("ex").best_score, 0.9);
     assert!(cfg.get_state("ex").passed);
+  }
+
+  #[test]
+  fn record_verification_tracks_test_counts_with_best_score() {
+    let mut cfg = ProjectConfig::default();
+
+    // First run: 2/4 tests, below threshold.
+    cfg.record_verification("ex", 0.5, 0.7, 2, 4);
+    let s = cfg.get_state("ex");
+    assert_eq!(s.best_score, 0.5);
+    assert_eq!(s.best_tests_passed, 2);
+    assert_eq!(s.tests_total, 4);
+    assert!(!s.passed);
+
+    // Regression run: lower score must not change best_score or its pass count,
+    // but the (stable) total is still refreshed.
+    cfg.record_verification("ex", 0.25, 0.7, 1, 4);
+    let s = cfg.get_state("ex");
+    assert_eq!(s.best_score, 0.5);
+    assert_eq!(s.best_tests_passed, 2);
+    assert_eq!(s.tests_total, 4);
+
+    // New best: all tests pass and threshold crossed.
+    cfg.record_verification("ex", 1.0, 0.7, 4, 4);
+    let s = cfg.get_state("ex");
+    assert_eq!(s.best_score, 1.0);
+    assert_eq!(s.best_tests_passed, 4);
+    assert!(s.passed);
   }
 
   #[test]

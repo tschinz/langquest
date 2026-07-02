@@ -26,6 +26,10 @@ pub struct PerModuleStats {
   pub hints_max_sum: usize,
   pub hints_total_sum: usize,
   pub best_score_sum: f64,
+  /// Sum of unit tests passed (at each exercise's best score).
+  pub tests_passed_sum: usize,
+  /// Sum of total unit tests across exercises.
+  pub tests_total_sum: usize,
 }
 
 /// Aggregated statistics report.
@@ -43,6 +47,10 @@ pub struct Report {
   pub hints_max_sum: usize,
   pub hints_total_sum: usize,
   pub best_score_sum: f64,
+  /// Sum of unit tests passed (at each exercise's best score).
+  pub tests_passed_sum: usize,
+  /// Sum of total unit tests across all exercises.
+  pub tests_total_sum: usize,
   pub by_module: BTreeMap<String, PerModuleStats>,
 }
 
@@ -87,6 +95,10 @@ struct StudentInfo {
 struct Summary {
   total_exercises: usize,
   completed: usize,
+  /// Unit tests passed across all exercises (at each exercise's best score).
+  tests_passed: usize,
+  /// Total unit tests across all exercises.
+  tests_total: usize,
   solutions_seen: usize,
   /// Cumulative hint presses (only counted while unsolved).
   hints_shown: usize,
@@ -103,6 +115,8 @@ struct Summary {
 struct ModuleResult {
   total: usize,
   completed: usize,
+  tests_passed: usize,
+  tests_total: usize,
   solutions_seen: usize,
   hints_shown: usize,
   average_best_score: f64,
@@ -117,6 +131,10 @@ struct ExerciseResult {
   difficulty: u8,
   passed: bool,
   best_score: f64,
+  /// Unit tests passed at the best score.
+  tests_passed: usize,
+  /// Total unit tests for this exercise.
+  tests_total: usize,
   solution_seen: bool,
   /// Cumulative hint presses recorded for this exercise.
   hints_shown: usize,
@@ -143,6 +161,8 @@ fn build_results(cfg: &ProjectConfig, all_exercises: &[exercise::Exercise]) -> R
         difficulty: ex.difficulty,
         passed: state.passed,
         best_score: state.best_score,
+        tests_passed: state.best_tests_passed,
+        tests_total: if ex.test_count > 0 { ex.test_count } else { state.tests_total },
         solution_seen: state.solution_seen,
         hints_shown: state.hints_shown,
         hints_revealed,
@@ -160,6 +180,8 @@ fn build_results(cfg: &ProjectConfig, all_exercises: &[exercise::Exercise]) -> R
         ModuleResult {
           total: m.total,
           completed: m.completed,
+          tests_passed: m.tests_passed_sum,
+          tests_total: m.tests_total_sum,
           solutions_seen: m.solutions_seen,
           hints_shown: m.hints_shown,
           average_best_score: if m.total > 0 { m.best_score_sum / m.total as f64 } else { 0.0 },
@@ -182,6 +204,8 @@ fn build_results(cfg: &ProjectConfig, all_exercises: &[exercise::Exercise]) -> R
     summary: Summary {
       total_exercises: report.total_exercises,
       completed: report.completed,
+      tests_passed: report.tests_passed_sum,
+      tests_total: report.tests_total_sum,
       solutions_seen: report.solutions_seen,
       hints_shown: report.hints_shown,
       hints_explored: report.hints_max_sum,
@@ -277,6 +301,16 @@ fn compute(cfg: &ProjectConfig, all_exercises: &[exercise::Exercise]) -> Report 
 
     report.best_score_sum += state.best_score;
     stats.best_score_sum += state.best_score;
+
+    // Unit-test counts (partial-credit signal). The total comes from the
+    // exercise's statically-counted tests so it is known before verification;
+    // fall back to the last recorded runtime total if the static count is 0.
+    // `best_tests_passed` is the pass count at the best score.
+    let tests_total = if ex.test_count > 0 { ex.test_count } else { state.tests_total };
+    report.tests_passed_sum += state.best_tests_passed;
+    report.tests_total_sum += tests_total;
+    stats.tests_passed_sum += state.best_tests_passed;
+    stats.tests_total_sum += tests_total;
   }
 
   report
@@ -304,6 +338,12 @@ fn render(report: &Report) {
   println!("  ───────");
   println!("  Total exercises:      {total}");
   println!("  Completed (passed):   {} ({:.1}%)", report.completed, pct(report.completed, total));
+  println!(
+    "  Unit tests passed:    {}/{} ({:.1}%)",
+    report.tests_passed_sum,
+    report.tests_total_sum,
+    pct(report.tests_passed_sum, report.tests_total_sum)
+  );
   println!("  Solutions seen:       {} ({:.1}%)", report.solutions_seen, pct(report.solutions_seen, total));
   println!("  Hints revealed:       {} total presses", report.hints_shown);
   println!("  Hints explored:       {}", fmt_hints(report.hints_max_sum, report.hints_total_sum));
@@ -322,6 +362,12 @@ fn render(report: &Report) {
       println!("    {mod_path}");
       println!("      Exercises:          {}", s.total);
       println!("      Completed:          {} ({:.1}%)", s.completed, pct(s.completed, s.total));
+      println!(
+        "      Unit tests passed:  {}/{} ({:.1}%)",
+        s.tests_passed_sum,
+        s.tests_total_sum,
+        pct(s.tests_passed_sum, s.tests_total_sum)
+      );
       println!("      Solutions seen:     {} ({:.1}%)", s.solutions_seen, pct(s.solutions_seen, s.total));
       println!("      Hints revealed:     {} total presses", s.hints_shown);
       println!("      Hints explored:     {}", fmt_hints(s.hints_max_sum, s.hints_total_sum));
@@ -384,6 +430,7 @@ mod tests {
       source_path: PathBuf::new(),
       solution_source: None,
       solution_data,
+      test_count: 0,
     }
   }
 
@@ -564,7 +611,7 @@ mod tests {
       }),
       ..Default::default()
     };
-    cfg.update_score("01-rust/01-hello", 1.0, 0.7); // passed
+    cfg.record_verification("01-rust/01-hello", 1.0, 0.7, 4, 4); // passed, 4/4 tests
     cfg.record_hint_reveal("01-rust/01-hello", 2, 5); // furthest level 2, one press
 
     let exercises = vec![make_exercise_hints("01-rust/01-hello", "01-rust", 5)];
@@ -576,8 +623,13 @@ mod tests {
 
     assert_eq!(results.summary.total_exercises, 1);
     assert_eq!(results.summary.completed, 1);
+    assert_eq!(results.summary.tests_passed, 4);
+    assert_eq!(results.summary.tests_total, 4);
     assert_eq!(results.summary.hints_total, 5);
-    assert_eq!(results.modules.get("01-rust").unwrap().completed, 1);
+    let m = results.modules.get("01-rust").unwrap();
+    assert_eq!(m.completed, 1);
+    assert_eq!(m.tests_passed, 4);
+    assert_eq!(m.tests_total, 4);
 
     assert_eq!(results.exercises.len(), 1);
     let e = &results.exercises[0];
@@ -585,12 +637,32 @@ mod tests {
     assert_eq!(e.language, "rust");
     assert!(e.passed);
     assert_eq!(e.best_score, 1.0);
+    assert_eq!(e.tests_passed, 4);
+    assert_eq!(e.tests_total, 4);
     assert_eq!(e.hints_total, 5);
     assert_eq!(e.hints_revealed, 2);
     assert_eq!(e.hints_shown, 1);
 
     // Must serialize to valid TOML.
     assert!(toml::to_string_pretty(&results).is_ok());
+  }
+
+  #[test]
+  fn tests_total_uses_static_count_before_verification() {
+    // An exercise with 4 statically-counted tests and NO progress must report
+    // its total (0/4), not 0/0.
+    let cfg = ProjectConfig::default();
+    let mut ex = make_exercise("03-riscv/01-regs", "03-riscv");
+    ex.test_count = 4;
+
+    let report = compute(&cfg, std::slice::from_ref(&ex));
+    assert_eq!(report.tests_passed_sum, 0);
+    assert_eq!(report.tests_total_sum, 4);
+
+    let results = build_results(&cfg, std::slice::from_ref(&ex));
+    assert_eq!(results.exercises[0].tests_total, 4);
+    assert_eq!(results.exercises[0].tests_passed, 0);
+    assert_eq!(results.summary.tests_total, 4);
   }
 
   #[test]

@@ -211,6 +211,10 @@ pub struct Exercise {
   pub solution_source: Option<PathBuf>,
   /// Parsed contents of `solution/solution.md`, if present.
   pub solution_data: Option<SolutionData>,
+  /// Number of unit tests defined for this exercise, counted statically from
+  /// the test source (so the total is known before the exercise is verified).
+  /// `0` when none are found or the language is not test-based.
+  pub test_count: usize,
 }
 
 // ---------------------------------------------------------------------------
@@ -413,6 +417,9 @@ pub fn load_exercise(exercise_dir: &Path, module_name: &str) -> Result<Exercise,
   // -- Optional: solution/main.* ------------------------------------------
   let solution_source = find_solution_source(exercise_dir);
 
+  // -- Count unit tests statically ---------------------------------------
+  let test_count = count_tests(exercise_dir, fm.language, &source_path);
+
   // -- Build relative path ------------------------------------------------
   let exercise_dir_name = exercise_dir.file_name().and_then(|n| n.to_str()).unwrap_or("unknown");
 
@@ -437,7 +444,36 @@ pub fn load_exercise(exercise_dir: &Path, module_name: &str) -> Result<Exercise,
     source_path,
     solution_source,
     solution_data,
+    test_count,
   })
+}
+
+/// Statically count the unit tests defined for an exercise.
+///
+/// Mirrors how the runner tallies `total` at verification time, but works from
+/// the source files alone so the count is known before the exercise is run:
+/// * Rust    — `#[test]` attributes in the student source (`main.rs`)
+/// * Go      — `func TestXxx(` in `main_test.go`
+/// * C++     — `TEST_CASE(` in `main_test.cpp`
+/// * Python  — `def test…(` in the student source (`main.py`)
+/// * RISC-V  — `# EXPECT_REG:` / `; EXPECT_REG:` directives in `main.asm`
+/// * Text    — not test-based (`0`)
+fn count_tests(exercise_dir: &Path, language: Language, source_path: &Path) -> usize {
+  /// Count lines whose trimmed form satisfies `pred`.
+  fn count_lines(path: &Path, pred: impl Fn(&str) -> bool) -> usize {
+    fs::read_to_string(path).map(|c| c.lines().filter(|l| pred(l.trim())).count()).unwrap_or(0)
+  }
+
+  match language {
+    Language::Rust => count_lines(source_path, |l| l.starts_with("#[test]")),
+    Language::Go => count_lines(&exercise_dir.join("main_test.go"), |l| l.starts_with("func Test")),
+    Language::Cpp => fs::read_to_string(exercise_dir.join("main_test.cpp"))
+      .map(|c| c.matches("TEST_CASE(").count())
+      .unwrap_or(0),
+    Language::Python => count_lines(source_path, |l| l.starts_with("def test")),
+    Language::Riscv => count_lines(source_path, |l| l.starts_with("# EXPECT_REG:") || l.starts_with("; EXPECT_REG:")),
+    Language::Text => 0,
+  }
 }
 
 /// Find the student source file (`main.*` not inside `solution/`).

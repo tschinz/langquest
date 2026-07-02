@@ -360,7 +360,9 @@ impl App {
         continue;
       }
 
-      self.config.update_score(&msg.exercise_path, msg.result.score, msg.result.threshold);
+      self
+        .config
+        .record_verification(&msg.exercise_path, msg.result.score, msg.result.threshold, msg.result.passed, msg.result.total);
       self.last_result = Some(msg.result);
       self.last_main_output = msg.main_output;
       self.active_verify_request = None;

@@ -493,6 +493,7 @@ mod tests {
       solution_seen: false,
       hints_shown: 0,
       hints_max: String::new(),
+      ..Default::default()
     };
     assert_eq!(derive_status(&state), ExerciseStatus::Failing);
   }
@@ -506,6 +507,7 @@ mod tests {
       solution_seen: false,
       hints_shown: 0,
       hints_max: String::new(),
+      ..Default::default()
     };
     assert_eq!(derive_status(&state), ExerciseStatus::Complete);
   }
@@ -518,6 +520,7 @@ mod tests {
       solution_seen: true,
       hints_shown: 0,
       hints_max: String::new(),
+      ..Default::default()
     };
     assert_eq!(derive_status(&state), ExerciseStatus::Complete);
   }
@@ -530,6 +533,7 @@ mod tests {
       solution_seen: true,
       hints_shown: 0,
       hints_max: String::new(),
+      ..Default::default()
     };
     assert_eq!(derive_status(&state), ExerciseStatus::Failing);
   }

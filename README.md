@@ -183,6 +183,8 @@ github_id = 4242
 [summary]
 total_exercises = 9
 completed = 7
+tests_passed = 38     # unit tests passed across all exercises …
+tests_total = 45      # … out of this many — enables partial-credit grading
 average_best_score = 0.82
 
 [[exercises]]
@@ -190,11 +192,30 @@ path = "01-rust/01-hello-world"
 language = "rust"
 passed = true
 best_score = 1.0
+tests_passed = 3      # per-exercise test counts (from the last/best run)
+tests_total = 3
 solution_seen = false
 hints_shown = 0
 hints_revealed = 0
 hints_total = 3
 ```
+
+The `tests_passed` / `tests_total` counts (also shown in the terminal `-s`
+output and per module) let you award partial credit for an "almost finished"
+exercise — a student who passes 3 of 4 unit tests still gets most of the points.
+
+`tests_total` is counted **statically** from the test source, so the total is
+known before an exercise is ever verified (it shows `0/N`, not `0/0`):
+
+| Language | Tests counted from |
+| --- | --- |
+| Rust | `#[test]` attributes in `main.rs` |
+| Go | `func Test…` in `main_test.go` |
+| C++ | `TEST_CASE(` in `main_test.cpp` (Catch2) |
+| Python | `def test…` in `main.py` |
+| RISC-V | `# EXPECT_REG:` / `; EXPECT_REG:` directives in `main.asm` |
+
+`tests_passed` is the number satisfied at the student's best verification.
 
 `results.toml` is a regenerable export (not read back by `lq`); the trust anchor
 remains the encrypted `.lq.progress`, so generate it yourself from each
