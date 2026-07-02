@@ -169,6 +169,37 @@ swap is immediately visible. Doing exercises (the interactive TUI) remains bound
 to the student's own GitHub account, so a copied file cannot be continued as
 one's own.
 
+Running `lq -s` also writes a machine-readable **`results.toml`** at the repo
+root — the full evaluation in a form that is easy to script grading against. It
+contains the bound student identity, overall and per-module summaries, and a
+per-exercise record (`passed`, `best_score`, `solution_seen`, hint counts, …):
+
+```toml
+[student]
+verified = true
+login = "alice"
+github_id = 4242
+
+[summary]
+total_exercises = 9
+completed = 7
+average_best_score = 0.82
+
+[[exercises]]
+path = "01-rust/01-hello-world"
+language = "rust"
+passed = true
+best_score = 1.0
+solution_seen = false
+hints_shown = 0
+hints_revealed = 0
+hints_total = 3
+```
+
+`results.toml` is a regenerable export (not read back by `lq`); the trust anchor
+remains the encrypted `.lq.progress`, so generate it yourself from each
+student's repo rather than trusting a committed copy.
+
 **Using multiple machines** (e.g. home PC + school laptop): because progress is
 bound to your GitHub *account* — not the machine — you can work on any machine
 signed into the same account. Since each student works in **their own fork**,
@@ -466,7 +497,8 @@ lq --repo /path/to/exercises
 # Check progress without launching TUI
 lq status
 
-# Detailed progress statistics (teachers can run this on any student repo)
+# Detailed progress statistics + write machine-readable results.toml
+# (teachers can run this on any student repo)
 lq -s --repo /path/to/student-repo
 
 # Reset all progress (prompts for confirmation)

@@ -4,12 +4,17 @@
 //! detailed progress report.
 
 use std::collections::BTreeMap;
+use std::fs;
 use std::path::Path;
 
 use anyhow::Result;
+use serde::Serialize;
 
 use crate::config::{self, ProjectConfig};
 use crate::exercise;
+
+/// Filename of the machine-readable evaluation export written by `lq -s`.
+const RESULTS_FILE: &str = "results.toml";
 
 /// Per-module statistics accumulator.
 #[derive(Debug, Default, PartialEq)]
@@ -41,8 +46,167 @@ pub struct Report {
   pub by_module: BTreeMap<String, PerModuleStats>,
 }
 
+// ---------------------------------------------------------------------------
+// Machine-readable results export (results.toml)
+// ---------------------------------------------------------------------------
+
+/// Full machine-readable evaluation, serialized to `results.toml`.
+#[derive(Debug, Serialize, PartialEq)]
+struct Results {
+  meta: Meta,
+  student: StudentInfo,
+  summary: Summary,
+  /// Per top-level module aggregates, keyed by module name.
+  modules: BTreeMap<String, ModuleResult>,
+  /// Flat per-exercise results (serialized as `[[exercises]]`).
+  exercises: Vec<ExerciseResult>,
+}
+
+/// Provenance metadata for the export.
+#[derive(Debug, Serialize, PartialEq)]
+struct Meta {
+  /// Unix timestamp (seconds) when the export was generated.
+  generated_at: u64,
+  /// Version of the `lq` binary that produced the file.
+  lq_version: String,
+}
+
+/// The GitHub identity the progress is bound to.
+#[derive(Debug, Serialize, PartialEq)]
+struct StudentInfo {
+  /// Whether progress has ever been bound to a GitHub account.
+  verified: bool,
+  /// GitHub login (empty when unverified).
+  login: String,
+  /// Immutable numeric GitHub id (0 when unverified).
+  github_id: u64,
+}
+
+/// Overall totals across all exercises.
+#[derive(Debug, Serialize, PartialEq)]
+struct Summary {
+  total_exercises: usize,
+  completed: usize,
+  solutions_seen: usize,
+  /// Cumulative hint presses (only counted while unsolved).
+  hints_shown: usize,
+  /// Sum of the furthest hint level reached per exercise.
+  hints_explored: usize,
+  /// Sum of the total hints available across exercises.
+  hints_total: usize,
+  /// Mean of per-exercise best scores in `[0.0, 1.0]`.
+  average_best_score: f64,
+}
+
+/// Per-module aggregate.
+#[derive(Debug, Serialize, PartialEq)]
+struct ModuleResult {
+  total: usize,
+  completed: usize,
+  solutions_seen: usize,
+  hints_shown: usize,
+  average_best_score: f64,
+}
+
+/// One exercise's full evaluation record.
+#[derive(Debug, Serialize, PartialEq)]
+struct ExerciseResult {
+  path: String,
+  name: String,
+  language: String,
+  difficulty: u8,
+  passed: bool,
+  best_score: f64,
+  solution_seen: bool,
+  /// Cumulative hint presses recorded for this exercise.
+  hints_shown: usize,
+  /// Furthest hint level reached.
+  hints_revealed: usize,
+  /// Total hints available for this exercise.
+  hints_total: usize,
+}
+
+/// Build the machine-readable [`Results`] from config and the exercise list.
+fn build_results(cfg: &ProjectConfig, all_exercises: &[exercise::Exercise]) -> Results {
+  let report = compute(cfg, all_exercises);
+
+  let exercises = all_exercises
+    .iter()
+    .map(|ex| {
+      let state = cfg.get_state(&ex.relative_path);
+      let hints_total = ex.solution_data.as_ref().map(|s| s.hints.len()).unwrap_or(0);
+      let hints_revealed = state.hints_max.split_once('/').and_then(|(r, _)| r.parse::<usize>().ok()).unwrap_or(0);
+      ExerciseResult {
+        path: ex.relative_path.clone(),
+        name: ex.name.clone(),
+        language: ex.language.syntax_token().to_string(),
+        difficulty: ex.difficulty,
+        passed: state.passed,
+        best_score: state.best_score,
+        solution_seen: state.solution_seen,
+        hints_shown: state.hints_shown,
+        hints_revealed,
+        hints_total,
+      }
+    })
+    .collect();
+
+  let modules = report
+    .by_module
+    .iter()
+    .map(|(name, m)| {
+      (
+        name.clone(),
+        ModuleResult {
+          total: m.total,
+          completed: m.completed,
+          solutions_seen: m.solutions_seen,
+          hints_shown: m.hints_shown,
+          average_best_score: if m.total > 0 { m.best_score_sum / m.total as f64 } else { 0.0 },
+        },
+      )
+    })
+    .collect();
+
+  let (verified, login, github_id) = match &report.owner {
+    Some(o) => (true, o.login.clone(), o.id),
+    None => (false, String::new(), 0),
+  };
+
+  Results {
+    meta: Meta {
+      generated_at: crate::identity::unix_now(),
+      lq_version: env!("CARGO_PKG_VERSION").to_string(),
+    },
+    student: StudentInfo { verified, login, github_id },
+    summary: Summary {
+      total_exercises: report.total_exercises,
+      completed: report.completed,
+      solutions_seen: report.solutions_seen,
+      hints_shown: report.hints_shown,
+      hints_explored: report.hints_max_sum,
+      hints_total: report.hints_total_sum,
+      average_best_score: if report.total_exercises > 0 {
+        report.best_score_sum / report.total_exercises as f64
+      } else {
+        0.0
+      },
+    },
+    modules,
+    exercises,
+  }
+}
+
+/// Serialize [`Results`] to TOML and write it to `path`.
+fn write_results(path: &Path, cfg: &ProjectConfig, all_exercises: &[exercise::Exercise]) -> Result<()> {
+  let results = build_results(cfg, all_exercises);
+  let toml = toml::to_string_pretty(&results)?;
+  fs::write(path, toml)?;
+  Ok(())
+}
+
 /// Run the `stats` subcommand: load config, discover exercises, compute and
-/// print statistics.
+/// print statistics, and write a machine-readable `results.toml`.
 pub fn run(repo_path: &Path) -> Result<()> {
   let cfg_path = config::config_path(repo_path);
   let cfg = ProjectConfig::load(&cfg_path)?;
@@ -55,6 +219,11 @@ pub fn run(repo_path: &Path) -> Result<()> {
 
   let report = compute(&cfg, &all_exercises);
   render(&report);
+
+  // Also emit a machine-readable evaluation for grading/automation.
+  let results_path = repo_path.join(RESULTS_FILE);
+  write_results(&results_path, &cfg, &all_exercises)?;
+  println!("\n  Results written to {}", results_path.display());
 
   Ok(())
 }
@@ -384,6 +553,52 @@ mod tests {
     assert_eq!(python.solutions_seen, 0);
     assert_eq!(python.hints_shown, 1);
     assert_eq!(python.best_score_sum, 0.4);
+  }
+
+  #[test]
+  fn build_results_captures_per_exercise_and_summary() {
+    let mut cfg = ProjectConfig {
+      owner: Some(crate::identity::GithubIdentity {
+        id: 7,
+        login: "alice".to_string(),
+      }),
+      ..Default::default()
+    };
+    cfg.update_score("01-rust/01-hello", 1.0, 0.7); // passed
+    cfg.record_hint_reveal("01-rust/01-hello", 2, 5); // furthest level 2, one press
+
+    let exercises = vec![make_exercise_hints("01-rust/01-hello", "01-rust", 5)];
+    let results = build_results(&cfg, &exercises);
+
+    assert!(results.student.verified);
+    assert_eq!(results.student.login, "alice");
+    assert_eq!(results.student.github_id, 7);
+
+    assert_eq!(results.summary.total_exercises, 1);
+    assert_eq!(results.summary.completed, 1);
+    assert_eq!(results.summary.hints_total, 5);
+    assert_eq!(results.modules.get("01-rust").unwrap().completed, 1);
+
+    assert_eq!(results.exercises.len(), 1);
+    let e = &results.exercises[0];
+    assert_eq!(e.path, "01-rust/01-hello");
+    assert_eq!(e.language, "rust");
+    assert!(e.passed);
+    assert_eq!(e.best_score, 1.0);
+    assert_eq!(e.hints_total, 5);
+    assert_eq!(e.hints_revealed, 2);
+    assert_eq!(e.hints_shown, 1);
+
+    // Must serialize to valid TOML.
+    assert!(toml::to_string_pretty(&results).is_ok());
+  }
+
+  #[test]
+  fn build_results_marks_unverified_without_owner() {
+    let results = build_results(&ProjectConfig::default(), &[]);
+    assert!(!results.student.verified);
+    assert_eq!(results.student.github_id, 0);
+    assert!(results.student.login.is_empty());
   }
 
   #[test]
