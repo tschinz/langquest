@@ -1,0 +1,5 @@
+@startuml
+' Draw the login sequence here.
+' Participants: User, Browser, Server
+' TODO: add the four messages described in 02-task.md
+@enduml

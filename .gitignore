@@ -35,6 +35,9 @@ tests/sample-repo-sealed/
 # Machine-readable evaluation export written by `lq -s` (regenerable).
 results.toml
 
+# PNGs rendered from PlantUML exercises in the test fixture (regenerable).
+tests/sample-repo/**/*.png
+
 # Machine-bound attestation — never commit (regenerated per machine).
 # The encrypted progress file `.lq.progress` is intentionally NOT ignored: it is
 # written into the *exercise* repo and should be TRACKED there so it syncs across

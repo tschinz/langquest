@@ -29,7 +29,7 @@ use std::time::Duration;
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use regex::RegexBuilder;
 
-use crate::config::{CppConfig, GoConfig, ProjectConfig, PythonConfig, RipesConfig, RustConfig};
+use crate::config::{CppConfig, GoConfig, PlantumlConfig, ProjectConfig, PythonConfig, RipesConfig, RustConfig};
 use crate::exercise::{Exercise, Language};
 
 // ---------------------------------------------------------------------------
@@ -195,6 +195,7 @@ pub fn verify(exercise: &Exercise, config: &ProjectConfig, cancel: &VerifyCancel
     Language::Python => verify_python(exercise, &config.python, cancel),
     Language::Go => verify_go(exercise, &config.go, cancel),
     Language::Cpp => verify_cpp(exercise, &config.cpp, cancel),
+    Language::Plantuml => verify_plantuml(exercise),
     Language::Text => verify_markdown(exercise),
   }
 }
@@ -1432,6 +1433,166 @@ fn verify_markdown(exercise: &Exercise) -> VerificationResult {
 }
 
 // ---------------------------------------------------------------------------
+// PlantUML runner
+// ---------------------------------------------------------------------------
+
+/// PlantUML jar embedded at build time (`assets/plantuml.jar`, MIT edition).
+///
+/// Used only as a fallback when [`PlantumlConfig::bin`] is empty, so a course
+/// can point at a pre-existing PlantUML install instead (mirrors Ripes, which
+/// discovers its binary rather than bundling one).
+const PLANTUML_JAR: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/plantuml.jar"));
+
+/// Verify a PlantUML exercise by fuzzy-comparing the student's diagram against
+/// the reference `solution/main.puml`.
+///
+/// The score is the [`plantuml_similarity`] of the two sources
+/// (order-insensitive, tolerant of minor differences). Rendering the PNG is a
+/// separate, save-time concern ([`render_plantuml_png`]), not part of scoring.
+fn verify_plantuml(exercise: &Exercise) -> VerificationResult {
+  let threshold = exercise.language.threshold();
+
+  let student = match fs::read_to_string(&exercise.source_path) {
+    Ok(s) => s,
+    Err(e) => return VerificationResult::zero(format!("Could not read your diagram: {e}"), threshold),
+  };
+
+  let solution_path = match &exercise.solution_source {
+    Some(p) => p,
+    None => return VerificationResult::zero("No reference solution to compare against.".to_string(), threshold),
+  };
+
+  // The reference may be sealed in a published student repo; read transparently.
+  let reference = match crate::solutions::read_maybe_sealed(solution_path) {
+    Ok(s) => s,
+    Err(e) => return VerificationResult::zero(format!("Could not read the reference solution: {e}"), threshold),
+  };
+
+  let score = plantuml_similarity(&reference, &student);
+  let passed = usize::from(score >= threshold);
+  let output = format!(
+    "PlantUML similarity to the reference diagram: {:.1}%\n(threshold to pass: {:.0}%)",
+    score * 100.0,
+    threshold * 100.0
+  );
+
+  VerificationResult {
+    score,
+    passed,
+    total: 1,
+    output,
+    threshold,
+  }
+}
+
+/// Resolve the `<plantuml>` command token: the configured
+/// [`PlantumlConfig::bin`] if set, otherwise the bundled jar unpacked to a
+/// stable cache path.
+fn resolve_plantuml(cfg: &PlantumlConfig) -> Result<String, String> {
+  if !cfg.bin.trim().is_empty() {
+    return Ok(cfg.bin.clone());
+  }
+  let dir = std::env::temp_dir().join("lq-plantuml");
+  fs::create_dir_all(&dir).map_err(|e| format!("failed to prepare PlantUML cache dir: {e}"))?;
+  let jar = dir.join("plantuml.jar");
+  let needs_write = fs::metadata(&jar).map(|m| m.len() != PLANTUML_JAR.len() as u64).unwrap_or(true);
+  if needs_write {
+    fs::write(&jar, PLANTUML_JAR).map_err(|e| format!("failed to unpack bundled PlantUML jar: {e}"))?;
+  }
+  Ok(jar.to_string_lossy().into_owned())
+}
+
+/// Render `puml_file` to a PNG next to it (on save), returning the PNG path.
+///
+/// Substitutes `<plantuml>` (resolved jar/launcher) and `<file>` in
+/// [`PlantumlConfig::cmd`].
+pub fn render_plantuml_png(cfg: &PlantumlConfig, puml_file: &Path) -> Result<PathBuf, String> {
+  let plantuml = resolve_plantuml(cfg)?;
+  let tokens: Vec<String> = cfg
+    .cmd
+    .split_whitespace()
+    .map(|t| match t {
+      "<plantuml>" => plantuml.clone(),
+      "<file>" => puml_file.to_string_lossy().into_owned(),
+      other => other.to_string(),
+    })
+    .collect();
+
+  let (program, args) = tokens.split_first().ok_or_else(|| "plantuml.cmd is empty in lq.toml".to_string())?;
+  let output = Command::new(program)
+    .args(args)
+    .output()
+    .map_err(|e| format!("failed to run '{program}': {e}"))?;
+  if !output.status.success() {
+    return Err(format!("PlantUML rendering failed:\n{}", String::from_utf8_lossy(&output.stderr).trim()));
+  }
+  // `plantuml -tpng foo.puml` writes `foo.png` beside the source.
+  Ok(puml_file.with_extension("png"))
+}
+
+/// Open `path` in the operating system's default application (image viewer).
+pub fn open_file(path: &Path) -> std::io::Result<()> {
+  #[cfg(target_os = "macos")]
+  let program = "open";
+  #[cfg(target_os = "windows")]
+  let program = "explorer";
+  #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+  let program = "xdg-open";
+  Command::new(program).arg(path).spawn().map(|_| ())
+}
+
+/// Fuzzy similarity in `0.0..=1.0` between two PlantUML sources.
+///
+/// Both sources are reduced to canonical lines (trimmed, lower-cased,
+/// whitespace-collapsed, comments and `@startuml`/`@enduml` removed) and
+/// **sorted**, so ordering and formatting don't matter; the score is the
+/// normalized Levenshtein similarity of the result, so a single-line typo costs
+/// little while a missing or extra element costs proportionally more.
+fn plantuml_similarity(reference: &str, student: &str) -> f64 {
+  let a = normalize_puml(reference).join("\n");
+  let b = normalize_puml(student).join("\n");
+  match (a.is_empty(), b.is_empty()) {
+    (true, true) => 1.0,
+    (true, _) | (_, true) => 0.0,
+    _ => {
+      let a: Vec<char> = a.chars().collect();
+      let b: Vec<char> = b.chars().collect();
+      let max = a.len().max(b.len());
+      1.0 - levenshtein(&a, &b) as f64 / max as f64
+    }
+  }
+}
+
+/// Reduce a PlantUML source to canonical, comparable, sorted lines.
+fn normalize_puml(src: &str) -> Vec<String> {
+  let mut lines: Vec<String> = src
+    .lines()
+    .map(str::trim)
+    .filter(|l| !l.is_empty())
+    .filter(|l| !l.starts_with('\'')) // PlantUML single-line comment
+    .map(|l| l.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase())
+    .filter(|l| !l.starts_with("@start") && !l.starts_with("@end"))
+    .collect();
+  lines.sort();
+  lines
+}
+
+/// Levenshtein edit distance between two character slices.
+fn levenshtein(a: &[char], b: &[char]) -> usize {
+  let mut prev: Vec<usize> = (0..=b.len()).collect();
+  let mut curr = vec![0usize; b.len() + 1];
+  for (i, ca) in a.iter().enumerate() {
+    curr[0] = i + 1;
+    for (j, cb) in b.iter().enumerate() {
+      let cost = usize::from(ca != cb);
+      curr[j + 1] = (prev[j + 1] + 1).min(curr[j] + 1).min(prev[j] + cost);
+    }
+    std::mem::swap(&mut prev, &mut curr);
+  }
+  prev[b.len()]
+}
+
+// ---------------------------------------------------------------------------
 // ExerciseWatcher
 // ---------------------------------------------------------------------------
 
@@ -1489,6 +1650,65 @@ impl ExerciseWatcher {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  // -- PlantUML similarity + bundled jar -------------------------------
+
+  #[test]
+  fn plantuml_identical_diagrams_score_one() {
+    let d = "@startuml\nAlice -> Bob: Hello\nBob --> Alice: Hi\n@enduml";
+    assert!((plantuml_similarity(d, d) - 1.0).abs() < 1e-9);
+  }
+
+  #[test]
+  fn plantuml_order_comments_whitespace_ignored() {
+    let reference = "@startuml\nAlice -> Bob: Hello\nBob --> Alice: Hi\n@enduml";
+    let student = "@startuml\n' my diagram\nBob   -->   Alice:   Hi\nalice -> bob: hello\n@enduml";
+    assert!((plantuml_similarity(reference, student) - 1.0).abs() < 1e-9);
+  }
+
+  #[test]
+  fn plantuml_small_typo_scores_high_but_not_perfect() {
+    let reference = "@startuml\nAlice -> Bob: Hello\n@enduml";
+    let student = "@startuml\nAlice -> Bob: Helo\n@enduml";
+    let s = plantuml_similarity(reference, student);
+    assert!(s > 0.85 && s < 1.0, "similarity was {s}");
+  }
+
+  #[test]
+  fn plantuml_missing_line_drops_below_pass_threshold() {
+    let reference = "@startuml\nA -> B\nB -> C\nC -> D\n@enduml";
+    let student = "@startuml\nA -> B\nB -> C\n@enduml";
+    let s = plantuml_similarity(reference, student);
+    assert!(s > 0.4 && s < 0.8, "similarity was {s}");
+  }
+
+  #[test]
+  fn plantuml_completely_different_scores_low() {
+    let reference = "@startuml\nAlice -> Bob: Hello\n@enduml";
+    let student = "@startuml\nclass Foo {\n  int x\n}\n@enduml";
+    assert!(plantuml_similarity(reference, student) < 0.5);
+  }
+
+  #[test]
+  fn plantuml_empty_student_scores_zero() {
+    assert_eq!(plantuml_similarity("@startuml\nA -> B\n@enduml", "@startuml\n@enduml"), 0.0);
+  }
+
+  #[test]
+  fn plantuml_bundled_jar_resolves_when_bin_empty() {
+    let cfg = PlantumlConfig::default();
+    let resolved = resolve_plantuml(&cfg).expect("bundled jar resolves");
+    assert!(Path::new(&resolved).exists());
+  }
+
+  #[test]
+  fn plantuml_explicit_bin_takes_priority() {
+    let cfg = PlantumlConfig {
+      bin: "/opt/plantuml.jar".to_string(),
+      ..Default::default()
+    };
+    assert_eq!(resolve_plantuml(&cfg).unwrap(), "/opt/plantuml.jar");
+  }
 
   // -- cap_output ------------------------------------------------------
 

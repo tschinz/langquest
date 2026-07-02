@@ -157,7 +157,7 @@ fn build_results(cfg: &ProjectConfig, all_exercises: &[exercise::Exercise]) -> R
       ExerciseResult {
         path: ex.relative_path.clone(),
         name: ex.name.clone(),
-        language: ex.language.syntax_token().to_string(),
+        language: ex.language.code().to_string(),
         difficulty: ex.difficulty,
         passed: state.passed,
         best_score: state.best_score,

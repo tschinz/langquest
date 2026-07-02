@@ -70,6 +70,7 @@ Depending on which languages your exercises use, install the corresponding toolc
 | **Go** | Install from [go.dev](https://go.dev/dl/) or via package manager |
 | **C++** | `g++` (Xcode CLT / `apt install g++`) and [Catch2](https://github.com/catchorg/Catch2) (`brew install catch2` / `apt install catch2`) |
 | **RISC-V** | GNU toolchain (`apt install gcc-riscv64-linux-gnu`) or [Ripes](https://github.com/mortbopet/Ripes) simulator |
+| **PlantUML** | A Java runtime (`java`) — the PlantUML engine is **bundled** into `lq` (or set `plantuml.bin` to a pre-existing install) |
 | **Markdown** | No additional tools required - verification is regex-based |
 
 > **Quick setup:** Run `just setup` to install all toolchains automatically (macOS, Linux, and Windows supported).
@@ -294,7 +295,7 @@ Each exercise lives in its own directory within a module:
 └── <NN>-<exercise>/
     ├── 01-theory.md           ← optional background reading
     ├── 02-task.md             ← required task description with frontmatter
-    ├── main.<ext>             ← student source file (rs, go, cpp, py, md, asm)
+    ├── main.<ext>             ← student source file (rs, go, cpp, py, md, asm, puml)
     └── solution/
         ├── main.<ext>         ← reference solution
         └── solution.md        ← hints and explanation
@@ -330,7 +331,7 @@ the string `"Hello, World!"` exactly.
 |---------------|--------------------------------------------------|-------------|
 | `id`          | string                                           | Unique snake_case identifier (key in `lq.toml`) |
 | `name`        | string                                           | Display name in the exercise table |
-| `language`    | string (`rust`, `go`, `cpp`, `python`, `riscv`, `text`) | language type of exercise |
+| `language`    | string (`rust`, `go`, `cpp`, `python`, `riscv`, `plantuml`, `text`) | language type of exercise |
 | `difficulty`  | integer (1-5)                                    | Shown as stars in the Overview |
 | `description` | string                                           | One-line summary |
 | `topics`      | array                                            | Tags shown in the Topics column |
@@ -433,6 +434,16 @@ def test_add_negative():
 ```
 
 > **Note:** The `<!-- Write your answer below -->` marker line is **mandatory** for text exercises. Keywords are only searched in the content that appears after this marker, so students can read the question without accidentally matching keywords in it.
+
+**PlantUML** (`main.puml`) - Diagrams graded by fuzzy similarity to `solution/main.puml`:
+
+```plantuml
+@startuml
+' TODO: draw the diagram described in 02-task.md
+@enduml
+```
+
+On save the diagram is rendered to `main.png` and opened automatically in the default image viewer. Rendering uses the PlantUML engine **bundled** into `lq` (only a `java` runtime is needed); set `plantuml.bin` in `lq.toml` to use a pre-existing install instead. Scoring is order-insensitive and tolerant of minor differences, with a `0.8` pass threshold.
 
 #### Solution Folder
 

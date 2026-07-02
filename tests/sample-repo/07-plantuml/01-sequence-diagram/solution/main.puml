@@ -1,0 +1,6 @@
+@startuml
+User -> Browser: login(user, pass)
+Browser -> Server: POST /login
+Server --> Browser: 200 OK
+Browser --> User: welcome
+@enduml

@@ -49,11 +49,11 @@ mod discovery {
   fn discovers_all_modules() {
     let (tree, _all_exercises, errors) = lq::exercise::discover_exercises(&sample_repo());
 
-    // There should be 6 top-level groups in the fixture repo.
+    // There should be 7 top-level groups in the fixture repo.
     assert_eq!(
       tree.len(),
-      6,
-      "expected 6 modules, got {}: {:?}",
+      7,
+      "expected 7 modules, got {}: {:?}",
       tree.len(),
       tree.iter().map(|n| &n.name).collect::<Vec<_>>()
     );
@@ -575,6 +575,51 @@ mod runner {
       result.score,
       result.output
     );
+  }
+
+  fn cancel_handle() -> lq::runner::VerifyCancel {
+    lq::runner::VerifyCancel::new(std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)), 0)
+  }
+
+  #[test]
+  fn verify_plantuml_starter_scores_low() {
+    let (_tree, all_exercises, _) = lq::exercise::discover_exercises(&sample_repo());
+    let ex = all_exercises.iter().find(|e| e.id == "sequence_login").expect("plantuml exercise present");
+
+    // The starter has no messages, so similarity to the reference is far below
+    // the pass threshold. Read-only — does not touch the fixture.
+    let result = lq::runner::verify(ex, &lq::config::ProjectConfig::default(), &cancel_handle());
+    assert_eq!(result.total, 1);
+    assert!(result.score < result.threshold, "starter should not pass, got {}", result.score);
+  }
+
+  #[test]
+  fn verify_plantuml_solution_scores_perfectly() {
+    // Work in an isolated temp copy of the exercise so we never mutate (or race
+    // on) the shared fixture. Simulate a student who submitted the exact solution.
+    let tmp = TempDir::new("plantuml_solution");
+    let ex_dir = tmp.path().join("07-plantuml").join("01-sequence-diagram");
+    fs::create_dir_all(ex_dir.join("solution")).expect("mkdir");
+
+    let src = sample_repo().join("07-plantuml").join("01-sequence-diagram");
+    fs::copy(src.join("02-task.md"), ex_dir.join("02-task.md")).expect("copy task");
+    fs::copy(src.join("solution").join("solution.md"), ex_dir.join("solution").join("solution.md")).expect("copy solution.md");
+    fs::copy(src.join("solution").join("main.puml"), ex_dir.join("solution").join("main.puml")).expect("copy ref");
+    // Student submits the exact reference solution.
+    let solution = fs::read_to_string(src.join("solution").join("main.puml")).expect("read ref");
+    fs::write(ex_dir.join("main.puml"), &solution).expect("write student");
+
+    let (_t, exs, _e) = lq::exercise::discover_exercises(tmp.path());
+    let ex = exs.iter().find(|e| e.id == "sequence_login").expect("discovered in temp repo");
+
+    let result = lq::runner::verify(ex, &lq::config::ProjectConfig::default(), &cancel_handle());
+    assert!(
+      (result.score - 1.0).abs() < f64::EPSILON,
+      "solution should score 1.0, got {} — {}",
+      result.score,
+      result.output
+    );
+    assert!(result.score >= result.threshold);
   }
 
   #[test]

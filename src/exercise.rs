@@ -31,6 +31,8 @@ pub enum Language {
   Go,
   /// C++ (`main.cpp`)
   Cpp,
+  /// PlantUML diagram (`main.puml`), scored by fuzzy similarity to the solution.
+  Plantuml,
   /// Markdown / plain-text questions (`main.md`)
   Text,
 }
@@ -48,6 +50,7 @@ impl Language {
       "py" => Some(Language::Python),
       "go" => Some(Language::Go),
       "cpp" | "cc" | "cxx" => Some(Language::Cpp),
+      "puml" | "plantuml" | "pu" => Some(Language::Plantuml),
       "md" => Some(Language::Text),
       _ => None,
     }
@@ -62,6 +65,7 @@ impl Language {
       Language::Python => "py",
       Language::Go => "go",
       Language::Cpp => "cpp",
+      Language::Plantuml => "puml",
       Language::Text => "md",
     }
   }
@@ -74,6 +78,8 @@ impl Language {
       Language::Go => 1.0,
       Language::Cpp => 1.0,
       Language::Riscv => 0.8,
+      // Fuzzy diagram match: require high but not exact similarity.
+      Language::Plantuml => 0.8,
       Language::Text => 0.75,
     }
   }
@@ -86,6 +92,7 @@ impl Language {
       Language::Python => "Python",
       Language::Go => "Go",
       Language::Cpp => "C++",
+      Language::Plantuml => "PlantUML",
       Language::Text => "Text",
     }
   }
@@ -102,7 +109,22 @@ impl Language {
       Language::Go => "go",
       Language::Cpp => "cpp",
       Language::Riscv => "asm",
+      Language::Plantuml => "",
       Language::Text => "",
+    }
+  }
+
+  /// Stable, canonical machine-readable identifier (matches the frontmatter
+  /// `language` value). Used for the `results.toml` export.
+  pub fn code(&self) -> &'static str {
+    match self {
+      Language::Rust => "rust",
+      Language::Riscv => "riscv",
+      Language::Python => "python",
+      Language::Go => "go",
+      Language::Cpp => "cpp",
+      Language::Plantuml => "plantuml",
+      Language::Text => "text",
     }
   }
 
@@ -114,6 +136,7 @@ impl Language {
       "python" => Some(Language::Python),
       "go" => Some(Language::Go),
       "cpp" | "c++" => Some(Language::Cpp),
+      "plantuml" | "puml" => Some(Language::Plantuml),
       "text" => Some(Language::Text),
       _ => None,
     }
@@ -472,6 +495,8 @@ fn count_tests(exercise_dir: &Path, language: Language, source_path: &Path) -> u
       .unwrap_or(0),
     Language::Python => count_lines(source_path, |l| l.starts_with("def test")),
     Language::Riscv => count_lines(source_path, |l| l.starts_with("# EXPECT_REG:") || l.starts_with("; EXPECT_REG:")),
+    // A single fuzzy-similarity check against the reference diagram.
+    Language::Plantuml => 1,
     Language::Text => 0,
   }
 }
@@ -499,7 +524,12 @@ fn find_student_source(exercise_dir: &Path) -> Result<PathBuf, ExerciseError> {
       None => continue,
     };
 
-    if file_name == "main" {
+    // Only accept `main.<ext>` where `<ext>` is a recognized source language.
+    // This skips generated artifacts that share the `main` stem — notably the
+    // `main.png` rendered from a PlantUML `main.puml`.
+    let is_source = path.extension().and_then(|e| e.to_str()).and_then(Language::from_extension).is_some();
+
+    if file_name == "main" && is_source {
       // Make sure it isn't inside `solution/` - should not be since we
       // are iterating the exercise dir itself, but guard anyway.
       if let Some(parent) = path.parent()
@@ -702,6 +732,22 @@ fn build_tree(
 mod tests {
   use super::*;
   use std::fs;
+
+  #[test]
+  fn find_student_source_ignores_generated_png() {
+    // A PlantUML exercise has both `main.puml` (source) and a rendered
+    // `main.png`; discovery must pick the source, not the generated image.
+    let dir = std::env::temp_dir().join(format!("lq_find_src_{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("main.png"), b"\x89PNG not text").unwrap();
+    fs::write(dir.join("main.puml"), "@startuml\n@enduml").unwrap();
+
+    let src = find_student_source(&dir).expect("should find a source");
+    assert_eq!(src.extension().and_then(|e| e.to_str()), Some("puml"));
+
+    let _ = fs::remove_dir_all(&dir);
+  }
 
   #[test]
   fn test_parse_frontmatter_valid() {

@@ -13,7 +13,7 @@ use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifier
 use ratatui::prelude::*;
 
 use crate::config::{self, ProjectConfig};
-use crate::exercise::{Exercise, ExerciseStatus, TreeNode, discover_exercises};
+use crate::exercise::{Exercise, ExerciseStatus, Language, TreeNode, discover_exercises};
 use crate::runner::{self, ExerciseWatcher, VerificationResult};
 use crate::ui;
 use crate::ui::cache::RenderCache;
@@ -243,6 +243,7 @@ impl App {
 
     app.setup_watcher();
     app.queue_verify();
+    app.maybe_render_plantuml();
     app.save_config();
 
     Ok(app)
@@ -288,6 +289,7 @@ impl App {
     self.scroll_offset = 0;
     self.setup_watcher();
     self.queue_verify();
+    self.maybe_render_plantuml();
     self.save_config();
   }
 
@@ -300,6 +302,28 @@ impl App {
   fn setup_watcher(&mut self) {
     let source = self.current_exercise().source_path.clone();
     self.watcher = ExerciseWatcher::new(&source).ok();
+  }
+
+  /// For a PlantUML exercise, render the diagram source to a PNG (in a detached
+  /// thread so the TUI stays responsive) and open it in the OS default viewer.
+  ///
+  /// Called on exercise open and on every save. The PNG is re-rendered and
+  /// re-opened each time so the student always sees the current diagram; the
+  /// default viewer (e.g. Preview) simply refocuses and reloads rather than
+  /// spawning duplicate windows.
+  fn maybe_render_plantuml(&self) {
+    let exercise = self.current_exercise();
+    if exercise.language != Language::Plantuml {
+      return;
+    }
+    let source = exercise.source_path.clone();
+    let cfg = self.config.plantuml.clone();
+
+    std::thread::spawn(move || {
+      if let Ok(png) = runner::render_plantuml_png(&cfg, &source) {
+        let _ = runner::open_file(&png);
+      }
+    });
   }
 
   /// Queue verification in a worker thread so the UI remains responsive.
@@ -452,6 +476,8 @@ impl App {
           let exercise_path = self.current_exercise().relative_path.clone();
           self.render_cache.invalidate_exercise(&exercise_path);
           self.queue_verify();
+          // Regenerate the PNG for PlantUML exercises on save.
+          self.maybe_render_plantuml();
         }
       }
 
