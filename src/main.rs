@@ -100,35 +100,16 @@ fn handle_reset(repo: Option<PathBuf>) -> Result<()> {
   Ok(())
 }
 
-/// Handle the `status` subcommand: print current exercise and progress.
+/// Handle the `status` subcommand.
+///
+/// `status` and `-s`/`--stats` show the same complete report; `status` is a
+/// convenient alias.
 fn handle_status(repo: Option<PathBuf>) -> Result<()> {
-  let repo_path = config::resolve_repo_path(repo.as_deref());
-  let cfg_path = config::config_path(&repo_path);
-  let cfg = config::ProjectConfig::load(&cfg_path)?;
-
-  // Reading is open (teachers/anyone may inspect); identity is enforced only on
-  // the write paths. Show the bound owner so a swapped file reveals its owner.
-  let (_tree, all_exercises, _errors) = exercise::discover_exercises(&repo_path);
-
-  match &cfg.owner {
-    Some(o) => println!("Owner: {} (GitHub #{})", o.login, o.id),
-    None => println!("Owner: (unverified — no GitHub identity bound yet)"),
-  }
-
-  match &cfg.current_exercise {
-    Some(name) => println!("Current exercise: {name}"),
-    None => println!("No current exercise set."),
-  }
-
-  let total = all_exercises.len();
-  let completed = all_exercises.iter().filter(|e| cfg.get_state(&e.relative_path).passed).count();
-
-  println!("{completed}/{total} exercises completed");
-
-  Ok(())
+  handle_stats(repo)
 }
 
-/// Handle the `stats` subcommand: delegate to the stats module.
+/// Handle the `stats` subcommand / `-s` flag: print the complete status report
+/// and write the machine-readable `results.toml`.
 fn handle_stats(repo: Option<PathBuf>) -> Result<()> {
   let repo_path = config::resolve_repo_path(repo.as_deref());
   stats::run(&repo_path)

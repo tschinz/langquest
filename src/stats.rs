@@ -40,6 +40,8 @@ pub struct Report {
   /// student whose repo this is (a swapped file shows a different owner).
   /// `None` when progress has never been bound (no online launch yet).
   pub owner: Option<crate::identity::GithubIdentity>,
+  /// Relative path of the current exercise, if one is set.
+  pub current_exercise: Option<String>,
   pub total_exercises: usize,
   pub completed: usize,
   pub solutions_seen: usize,
@@ -256,6 +258,7 @@ pub fn run(repo_path: &Path) -> Result<()> {
 fn compute(cfg: &ProjectConfig, all_exercises: &[exercise::Exercise]) -> Report {
   let mut report = Report {
     owner: cfg.owner.clone(),
+    current_exercise: cfg.current_exercise.clone(),
     ..Default::default()
   };
 
@@ -330,6 +333,10 @@ fn render(report: &Report) {
   match &report.owner {
     Some(o) => println!("  Owner: {} (GitHub #{})", o.login, o.id),
     None => println!("  Owner: (unverified — no GitHub identity bound yet)"),
+  }
+  match &report.current_exercise {
+    Some(name) => println!("  Current exercise: {name}"),
+    None => println!("  Current exercise: (none set)"),
   }
 
   // Overall summary
