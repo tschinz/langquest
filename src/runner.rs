@@ -1508,15 +1508,8 @@ fn resolve_plantuml(cfg: &PlantumlConfig) -> Result<String, String> {
 /// [`PlantumlConfig::cmd`].
 pub fn render_plantuml_png(cfg: &PlantumlConfig, puml_file: &Path) -> Result<PathBuf, String> {
   let plantuml = resolve_plantuml(cfg)?;
-  let tokens: Vec<String> = cfg
-    .cmd
-    .split_whitespace()
-    .map(|t| match t {
-      "<plantuml>" => plantuml.clone(),
-      "<file>" => puml_file.to_string_lossy().into_owned(),
-      other => other.to_string(),
-    })
-    .collect();
+  let file = puml_file.to_string_lossy();
+  let tokens = expand_cmd(&cfg.cmd, &[("<plantuml>", &plantuml), ("<file>", &file)]);
 
   let (program, args) = tokens.split_first().ok_or_else(|| "plantuml.cmd is empty in lq.toml".to_string())?;
   let output = Command::new(program)
@@ -1544,6 +1537,20 @@ pub fn open_file(path: &Path) -> std::io::Result<()> {
 // ---------------------------------------------------------------------------
 // Editor / IDE launching
 // ---------------------------------------------------------------------------
+
+/// Expand a command template, replacing whole-word `<key>` tokens with their
+/// values and leaving every other token unchanged.
+fn expand_cmd(template: &str, subs: &[(&str, &str)]) -> Vec<String> {
+  template
+    .split_whitespace()
+    .map(|tok| {
+      subs
+        .iter()
+        .find(|(key, _)| *key == tok)
+        .map_or_else(|| tok.to_string(), |(_, val)| (*val).to_string())
+    })
+    .collect()
+}
 
 /// Search `$PATH` (and, on Windows, common executable extensions) for the first
 /// existing executable among `names`, preferring earlier names.
@@ -1607,15 +1614,8 @@ pub fn open_in_ide(cfg: &IdeConfig, file: &Path) -> bool {
   let Some(ide) = resolve_ide(cfg) else {
     return false;
   };
-  let tokens: Vec<String> = cfg
-    .cmd
-    .split_whitespace()
-    .map(|t| match t {
-      "<ide>" => ide.clone(),
-      "<file>" => file.to_string_lossy().into_owned(),
-      other => other.to_string(),
-    })
-    .collect();
+  let file = file.to_string_lossy();
+  let tokens = expand_cmd(&cfg.cmd, &[("<ide>", &ide), ("<file>", &file)]);
   let Some((program, args)) = tokens.split_first() else {
     return false;
   };

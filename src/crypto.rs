@@ -8,8 +8,8 @@
 //! tamper-*evidence* against casual editing, not protection against an attacker
 //! who reverse-engineers `lq`. See `identity` for the transfer-resistance layer.
 
-use chacha20poly1305::aead::{Aead, AeadCore, KeyInit, OsRng};
-use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
+use chacha20poly1305::aead::{Aead, Generate, KeyInit};
+use chacha20poly1305::{ChaCha20Poly1305, Nonce};
 use thiserror::Error;
 
 /// Magic marker prefixed to every sealed blob so a stray/foreign file is
@@ -38,8 +38,8 @@ pub enum CryptoError {
 /// A fresh random nonce is generated per call, so sealing identical plaintext
 /// twice yields different blobs.
 pub fn seal(key: &[u8; 32], plaintext: &[u8]) -> Vec<u8> {
-  let cipher = ChaCha20Poly1305::new(Key::from_slice(key));
-  let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng);
+  let cipher = ChaCha20Poly1305::new_from_slice(key).expect("key is exactly 32 bytes");
+  let nonce = Nonce::generate();
   // Encryption over an in-memory buffer is infallible for ChaCha20-Poly1305.
   let ciphertext = cipher.encrypt(&nonce, plaintext).expect("aead encryption cannot fail in-memory");
 
@@ -68,9 +68,9 @@ pub fn open(key: &[u8; 32], data: &[u8]) -> Result<Vec<u8>, CryptoError> {
   if data.len() < HEADER_LEN || &data[..4] != MAGIC {
     return Err(CryptoError::Format);
   }
-  let nonce = Nonce::from_slice(&data[4..HEADER_LEN]);
-  let cipher = ChaCha20Poly1305::new(Key::from_slice(key));
-  cipher.decrypt(nonce, &data[HEADER_LEN..]).map_err(|_| CryptoError::Tamper)
+  let cipher = ChaCha20Poly1305::new_from_slice(key).expect("key is exactly 32 bytes");
+  let nonce = Nonce::try_from(&data[4..HEADER_LEN]).expect("header guarantees a 12-byte nonce");
+  cipher.decrypt(&nonce, &data[HEADER_LEN..]).map_err(|_| CryptoError::Tamper)
 }
 
 #[cfg(test)]
