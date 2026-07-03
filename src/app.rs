@@ -3,9 +3,9 @@
 use std::collections::HashSet;
 use std::io::BufWriter;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use anyhow::{Result, bail};
@@ -147,6 +147,11 @@ pub struct App {
   pub watcher: Option<ExerciseWatcher>,
   /// Whether the "unlock solution?" warning is awaiting a second `h` press.
   pub solution_unlock_pending: bool,
+  /// Relative paths of PlantUML exercises whose rendered PNG has already been
+  /// opened this session. The diagram is re-rendered on every save (so the
+  /// editor auto-reloads it), but the viewer/IDE is launched only the first
+  /// time to avoid opening duplicate tabs. Shared with the render threads.
+  pub opened_pngs: Arc<Mutex<HashSet<String>>>,
   /// Cache for parsed markdown content to avoid re-parsing every frame.
   pub render_cache: RenderCache,
   /// Track if a redraw is needed (dirty flag for optimization).
@@ -189,6 +194,14 @@ impl App {
     let owner = crate::identity::authorize(&repo_path, config.owner.clone()).map_err(|reason| anyhow::anyhow!("progress locked: {reason}"))?;
     config.owner = Some(owner);
 
+    // Auto-populate a platform-appropriate IDE the first time, so the resolved
+    // path is visible and editable in lq.toml (mirrors ripes.bin discovery).
+    if config.ide.bin.is_empty()
+      && let Some(ide) = runner::find_ide_binary()
+    {
+      config.ide.bin = ide.to_string_lossy().into_owned();
+    }
+
     // Resolve starting index from config.current_exercise.
     let current_index = config
       .current_exercise
@@ -213,6 +226,7 @@ impl App {
       overview_cursor: 1,
       tree_line_kinds: Vec::new(),
       collapsed_groups: HashSet::new(),
+      opened_pngs: Arc::new(Mutex::new(HashSet::new())),
       show_menu: true,
       scroll_offset: 0,
       content_height: 0,
@@ -305,12 +319,13 @@ impl App {
   }
 
   /// For a PlantUML exercise, render the diagram source to a PNG (in a detached
-  /// thread so the TUI stays responsive) and open it in the OS default viewer.
+  /// thread so the TUI stays responsive) and open it for preview.
   ///
-  /// Called on exercise open and on every save. The PNG is re-rendered and
-  /// re-opened each time so the student always sees the current diagram; the
-  /// default viewer (e.g. Preview) simply refocuses and reloads rather than
-  /// spawning duplicate windows.
+  /// Called on exercise open and on every save. The PNG is re-rendered every
+  /// time so the student always sees the current diagram, but the viewer/IDE is
+  /// launched only the first successful render per exercise this session —
+  /// editors like Zed/VS Code auto-reload the already-open image on later saves,
+  /// so re-opening would just spawn duplicate tabs.
   fn maybe_render_plantuml(&self) {
     let exercise = self.current_exercise();
     if exercise.language != Language::Plantuml {
@@ -318,10 +333,21 @@ impl App {
     }
     let source = exercise.source_path.clone();
     let cfg = self.config.plantuml.clone();
+    let ide = self.config.ide.clone();
+    let key = exercise.relative_path.clone();
+    let opened = Arc::clone(&self.opened_pngs);
 
     std::thread::spawn(move || {
-      if let Ok(png) = runner::render_plantuml_png(&cfg, &source) {
-        let _ = runner::open_file(&png);
+      let Ok(png) = runner::render_plantuml_png(&cfg, &source) else {
+        return;
+      };
+      // Only open on the first successful render for this exercise this session.
+      let first_open = opened.lock().map(|mut set| set.insert(key)).unwrap_or(false);
+      if first_open {
+        // Prefer the configured IDE for the preview; fall back to the OS viewer.
+        if !runner::open_in_ide(&ide, &png) {
+          let _ = runner::open_file(&png);
+        }
       }
     });
   }
@@ -951,10 +977,11 @@ impl App {
   /// Open the current exercise's source file in an editor.
   ///
   /// Resolution order:
-  /// 1. `$VISUAL` - the user's preferred GUI editor (e.g. `code`, `zed`).
+  /// 1. The configured `[ide]` (`ide.bin` or an auto-discovered Zed/VS Code).
+  /// 2. `$VISUAL` - the user's preferred GUI editor.
   ///    `$EDITOR` is intentionally skipped: terminal editors (vim, nano, …)
   ///    would conflict with the running TUI.
-  /// 2. OS default text handler:
+  /// 3. OS default text handler:
   ///    - macOS  : `open -t <file>` - always opens as text, even for unknown
   ///      extensions like `.asm` where plain `open` would fail.
   ///    - Linux  : `xdg-open <file>`
@@ -965,13 +992,17 @@ impl App {
     if self.view != View::ExerciseView {
       return;
     }
-    let path = &self.current_exercise().source_path;
+    let path = self.current_exercise().source_path.clone();
 
-    // Prefer $VISUAL (GUI editor) over OS default.
+    // Prefer the configured IDE, then $VISUAL, then the OS default handler.
+    if runner::open_in_ide(&self.config.ide, &path) {
+      return;
+    }
+
     if let Ok(visual) = std::env::var("VISUAL")
       && !visual.is_empty()
     {
-      let _ = std::process::Command::new(&visual).arg(path).spawn();
+      let _ = std::process::Command::new(&visual).arg(&path).spawn();
       return;
     }
 
@@ -979,10 +1010,10 @@ impl App {
     let _ = std::process::Command::new("open").args(["-t", &path.to_string_lossy()]).spawn();
 
     #[cfg(target_os = "linux")]
-    let _ = std::process::Command::new("xdg-open").arg(path).spawn();
+    let _ = std::process::Command::new("xdg-open").arg(&path).spawn();
 
     #[cfg(target_os = "windows")]
-    let _ = std::process::Command::new("explorer").arg(path).spawn();
+    let _ = std::process::Command::new("explorer").arg(&path).spawn();
   }
 
   /// Check whether the Solution page is accessible for the current exercise.

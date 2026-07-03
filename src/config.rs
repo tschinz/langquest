@@ -192,6 +192,32 @@ impl Default for PlantumlConfig {
   }
 }
 
+/// Configuration for the external editor / IDE used by the `e` shortcut and to
+/// preview rendered PlantUML diagrams.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IdeConfig {
+  /// Path to the IDE launcher (e.g. `zed` or `code`).
+  ///
+  /// Auto-populated on first launch with a platform-appropriate default when a
+  /// known IDE is discovered on the system; edit to point at your preferred
+  /// editor. When empty (nothing found), `lq` falls back to the OS default
+  /// handler. Mirrors [`RipesConfig::bin`].
+  #[serde(default)]
+  pub bin: String,
+  /// Command template used to open a file. `<ide>` is substituted with
+  /// [`bin`](Self::bin) and `<file>` with the file to open.
+  pub cmd: String,
+}
+
+impl Default for IdeConfig {
+  fn default() -> Self {
+    Self {
+      bin: String::new(),
+      cmd: "<ide> <file>".to_string(),
+    }
+  }
+}
+
 /// Plaintext, hand-editable toolchain commands, persisted as `lq.toml`.
 ///
 /// These are safe for students to see and tweak; they contain no progress.
@@ -207,6 +233,8 @@ struct CommandsFile {
   cpp: CppConfig,
   #[serde(default)]
   plantuml: PlantumlConfig,
+  #[serde(default)]
+  ide: IdeConfig,
   #[serde(default)]
   ripes: RipesConfig,
 }
@@ -260,6 +288,9 @@ pub struct ProjectConfig {
   /// user can customise the command without recompiling.
   #[serde(default)]
   pub plantuml: PlantumlConfig,
+  /// Editor/IDE settings for the `e` shortcut and PlantUML preview.
+  #[serde(default)]
+  pub ide: IdeConfig,
   /// Ripes simulator settings.  Written to `lq.toml` on first save so the
   /// user can customise the command without recompiling.
   #[serde(default)]
@@ -288,6 +319,7 @@ impl ProjectConfig {
       go: commands.go,
       cpp: commands.cpp,
       plantuml: commands.plantuml,
+      ide: commands.ide,
       ripes: commands.ripes,
     })
   }
@@ -311,6 +343,7 @@ impl ProjectConfig {
       go: commands.go,
       cpp: commands.cpp,
       plantuml: commands.plantuml,
+      ide: commands.ide,
       ripes: commands.ripes,
     })
   }
@@ -371,6 +404,7 @@ impl ProjectConfig {
       go: self.go.clone(),
       cpp: self.cpp.clone(),
       plantuml: self.plantuml.clone(),
+      ide: self.ide.clone(),
       ripes: self.ripes.clone(),
     };
     let contents = toml::to_string(&commands).map_err(|e| ConfigError::Serialize { source: e })?;

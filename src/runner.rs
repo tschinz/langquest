@@ -29,7 +29,7 @@ use std::time::Duration;
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use regex::RegexBuilder;
 
-use crate::config::{CppConfig, GoConfig, PlantumlConfig, ProjectConfig, PythonConfig, RipesConfig, RustConfig};
+use crate::config::{CppConfig, GoConfig, IdeConfig, PlantumlConfig, ProjectConfig, PythonConfig, RipesConfig, RustConfig};
 use crate::exercise::{Exercise, Language};
 
 // ---------------------------------------------------------------------------
@@ -1541,6 +1541,87 @@ pub fn open_file(path: &Path) -> std::io::Result<()> {
   Command::new(program).arg(path).spawn().map(|_| ())
 }
 
+// ---------------------------------------------------------------------------
+// Editor / IDE launching
+// ---------------------------------------------------------------------------
+
+/// Search `$PATH` (and, on Windows, common executable extensions) for the first
+/// existing executable among `names`, preferring earlier names.
+fn which(names: &[&str]) -> Option<PathBuf> {
+  let path = std::env::var_os("PATH")?;
+  let dirs: Vec<PathBuf> = std::env::split_paths(&path).collect();
+  let exts: &[&str] = if cfg!(windows) { &["", ".exe", ".cmd", ".bat"] } else { &[""] };
+  for name in names {
+    for dir in &dirs {
+      for ext in exts {
+        let candidate = dir.join(format!("{name}{ext}"));
+        if candidate.is_file() {
+          return Some(candidate);
+        }
+      }
+    }
+  }
+  None
+}
+
+/// Discover a sensible default IDE for this platform.
+///
+/// Prefers Zed, then the VS Code family, looking on `$PATH` first and then at
+/// well-known install locations. Returns `None` if none is found (the caller
+/// then falls back to the OS default handler).
+pub(crate) fn find_ide_binary() -> Option<PathBuf> {
+  if let Some(p) = which(&["zed", "code", "codium", "code-insiders"]) {
+    return Some(p);
+  }
+
+  // Well-known absolute locations not always on `$PATH`.
+  #[cfg(target_os = "macos")]
+  let candidates: &[&str] = &[
+    "/opt/homebrew/bin/zed",
+    "/usr/local/bin/zed",
+    "/Applications/Zed.app/Contents/MacOS/cli",
+    "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code",
+  ];
+  #[cfg(target_os = "windows")]
+  let candidates: &[&str] = &[r"C:\Program Files\Zed\zed.exe"];
+  #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+  let candidates: &[&str] = &["/usr/bin/zed", "/usr/local/bin/zed", "/usr/bin/code"];
+
+  candidates.iter().map(PathBuf::from).find(|p| p.is_file())
+}
+
+/// Resolve the IDE launcher: [`IdeConfig::bin`] if set, else auto-discovery.
+fn resolve_ide(cfg: &IdeConfig) -> Option<String> {
+  if !cfg.bin.trim().is_empty() {
+    return Some(cfg.bin.clone());
+  }
+  find_ide_binary().map(|p| p.to_string_lossy().into_owned())
+}
+
+/// Open `file` in the configured IDE, returning `true` if it was launched.
+///
+/// Substitutes `<ide>` (the resolved launcher) and `<file>` in
+/// [`IdeConfig::cmd`]. Returns `false` when no IDE is configured or found, so
+/// the caller can fall back to the OS default handler.
+pub fn open_in_ide(cfg: &IdeConfig, file: &Path) -> bool {
+  let Some(ide) = resolve_ide(cfg) else {
+    return false;
+  };
+  let tokens: Vec<String> = cfg
+    .cmd
+    .split_whitespace()
+    .map(|t| match t {
+      "<ide>" => ide.clone(),
+      "<file>" => file.to_string_lossy().into_owned(),
+      other => other.to_string(),
+    })
+    .collect();
+  let Some((program, args)) = tokens.split_first() else {
+    return false;
+  };
+  Command::new(program).args(args).spawn().is_ok()
+}
+
 /// Fuzzy similarity in `0.0..=1.0` between two PlantUML sources.
 ///
 /// Both sources are reduced to canonical lines (trimmed, lower-cased,
@@ -1708,6 +1789,44 @@ mod tests {
       ..Default::default()
     };
     assert_eq!(resolve_plantuml(&cfg).unwrap(), "/opt/plantuml.jar");
+  }
+
+  // -- IDE launching ---------------------------------------------------
+
+  #[test]
+  #[cfg(unix)]
+  fn which_finds_a_common_binary() {
+    assert!(which(&["sh"]).is_some());
+    assert!(which(&["definitely-not-a-real-binary-xyz"]).is_none());
+  }
+
+  #[test]
+  fn resolve_ide_prefers_explicit_bin() {
+    let cfg = IdeConfig {
+      bin: "/opt/zed".to_string(),
+      cmd: "<ide> <file>".to_string(),
+    };
+    assert_eq!(resolve_ide(&cfg).unwrap(), "/opt/zed");
+  }
+
+  #[test]
+  #[cfg(unix)]
+  fn open_in_ide_launches_configured_bin() {
+    // Use `true` as a harmless stand-in editor: it accepts any args and exits.
+    let cfg = IdeConfig {
+      bin: "true".to_string(),
+      cmd: "<ide> <file>".to_string(),
+    };
+    assert!(open_in_ide(&cfg, Path::new("/tmp/example.rs")));
+  }
+
+  #[test]
+  fn open_in_ide_returns_false_for_missing_bin() {
+    let cfg = IdeConfig {
+      bin: "/definitely/not/an/ide-xyz".to_string(),
+      cmd: "<ide> <file>".to_string(),
+    };
+    assert!(!open_in_ide(&cfg, Path::new("/tmp/example.rs")));
   }
 
   // -- cap_output ------------------------------------------------------

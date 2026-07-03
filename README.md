@@ -139,7 +139,18 @@ cmd = "python3 -m pytest <file> --tb=short -q"
 [ripes]
 bin = "/Applications/Ripes.app/Contents/MacOS/Ripes"
 cmd = "ripes --mode cli -t asm --proc RV32_SS --json --src <file>"
+
+[ide]
+bin = "/usr/local/bin/zed"          # your editor; auto-detected on first run
+cmd = "<ide> <file>"
 ```
+
+The **`e`** shortcut opens the current exercise's source file in the editor
+configured under `[ide]` (and PlantUML previews open there too). `ide.bin`,
+`ripes.bin`, and `plantuml.bin` are auto-populated with a platform-appropriate
+default the first time `lq` runs — Zed or VS Code for the IDE, the discovered
+Ripes app for RISC-V, and the bundled engine for PlantUML — and can be edited to
+point elsewhere. When no IDE is found, `e` falls back to the OS default handler.
 
 **Persistence rules (progress):**
 - `best_score` only increases - lower scores never overwrite higher ones
@@ -443,7 +454,7 @@ def test_add_negative():
 @enduml
 ```
 
-On save the diagram is rendered to `main.png` and opened automatically in the default image viewer. Rendering uses the PlantUML engine **bundled** into `lq` (only a `java` runtime is needed); set `plantuml.bin` in `lq.toml` to use a pre-existing install instead. Scoring is order-insensitive and tolerant of minor differences, with a `0.8` pass threshold.
+On save the diagram is rendered to `main.png`. It is opened once in the configured `[ide]` (or the OS default image viewer if none is found); later saves re-render the file in place, which the editor auto-reloads, so no duplicate tabs are opened. Rendering uses the PlantUML engine **bundled** into `lq` (only a `java` runtime is needed); set `plantuml.bin` in `lq.toml` to use a pre-existing install instead. Scoring is order-insensitive and tolerant of minor differences, with a `0.8` pass threshold.
 
 #### Solution Folder
 
