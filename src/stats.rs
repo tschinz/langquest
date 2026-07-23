@@ -8,6 +8,7 @@ use std::fs;
 use std::path::Path;
 
 use anyhow::Result;
+use anyhow::bail;
 use serde::Serialize;
 
 use crate::config::{self, ProjectConfig};
@@ -242,6 +243,10 @@ pub fn run(repo_path: &Path) -> Result<()> {
   // the tamper-proof blob and shown below so a swapped file reveals its true
   // owner.
   let (_tree, all_exercises, _errors) = exercise::discover_exercises(repo_path);
+
+  if all_exercises.is_empty() {
+    bail!("no exercises found in {}", repo_path.display());
+  }
 
   let report = compute(&cfg, &all_exercises);
   render(&report);
