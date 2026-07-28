@@ -1692,8 +1692,10 @@ pub struct ExerciseWatcher {
 }
 
 impl ExerciseWatcher {
-  /// Begin watching `source_path` (a single file) for create / modify
-  /// events.
+  /// Begin watching the parent of `source_path` (a single file) for create / modify
+  /// events and filter for events targeting `source_path`.
+  /// This methodology prevents problems with some editors on linux which perform
+  /// atomic swaps.
   ///
   /// # Errors
   ///
@@ -1701,11 +1703,19 @@ impl ExerciseWatcher {
   /// the path cannot be watched (e.g. it does not exist).
   pub fn new(source_path: &Path) -> anyhow::Result<Self> {
     let (tx, rx) = mpsc::channel();
+    let file_name = source_path
+      .file_name()
+      .ok_or_else(|| anyhow::anyhow!("source file {:?} is not a file", source_path))?
+      .to_os_string();
+    let parent = source_path
+      .parent()
+      .ok_or_else(|| anyhow::anyhow!("source file {:?} does not have a parent dir", source_path))?;
 
     let mut watcher = RecommendedWatcher::new(
       move |res: Result<notify::Event, notify::Error>| {
         if let Ok(event) = res
           && matches!(event.kind, EventKind::Create(_) | EventKind::Modify(_))
+          && event.paths.iter().any(|p| p.file_name() == Some(&file_name))
         {
           // Ignore send errors - the receiver may have been
           // dropped if the app is shutting down.
@@ -1715,7 +1725,7 @@ impl ExerciseWatcher {
       Config::default(),
     )?;
 
-    watcher.watch(source_path, RecursiveMode::NonRecursive)?;
+    watcher.watch(parent, RecursiveMode::NonRecursive)?;
 
     Ok(Self {
       _watcher: watcher,
