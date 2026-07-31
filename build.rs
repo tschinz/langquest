@@ -5,8 +5,7 @@ use std::path::PathBuf;
 
 fn main() {
   // Find files for build
-  let project_root = std::env::var("CARGO_MANIFEST_DIR")
-    .expect("Impossible de lire CARGO_MANIFEST_DIR");
+  let project_root = std::env::var("CARGO_MANIFEST_DIR").expect("Impossible de lire CARGO_MANIFEST_DIR");
   let project_path = PathBuf::from(project_root);
   let env_path = project_path.join(".env");
   let template_path = project_path.join(".env.template");
@@ -26,23 +25,19 @@ fn main() {
   }
 
   // Loads .env
-  dotenvy::from_path(&env_path).unwrap_or_else(|_| {
-    panic!("❌ Impossible to load the .env file from : {}", env_path.display())
-  });
+  dotenvy::from_path(&env_path).unwrap_or_else(|_| panic!("❌ Impossible to load the .env file from : {}", env_path.display()));
 
   // Retrieve keys
   let keys = ["PROGRESS_KEY", "ATTEST_KEY", "SOLUTION_KEY"];
   for key in keys {
-    let value = std::env::var(key).unwrap_or_else(|_| {
-        panic!("❌ Compilation error : The key '{}' is missing in your .env file.", key)
-      });
-      if value.len() != 32 {
-        panic!(
-          "❌ Compilation error : The key '{}' must be exactly 32 bytes long (current length: {} bytes).",
-          key,
-          value.len()
-        );
-      }
+    let value = std::env::var(key).unwrap_or_else(|_| panic!("❌ Compilation error : The key '{}' is missing in your .env file.", key));
+    if value.len() != 32 {
+      panic!(
+        "❌ Compilation error : The key '{}' must be exactly 32 bytes long (current length: {} bytes).",
+        key,
+        value.len()
+      );
+    }
     // Inject inside compiler
     println!("cargo:rustc-env={}={}", key, value);
   }
