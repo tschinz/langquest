@@ -10,7 +10,8 @@ use crate::error::ConfigError;
 use crate::identity::GithubIdentity;
 
 /// Embedded key used to seal the on-disk progress file.
-const PROGRESS_KEY: [u8; 32] = *b"lq-progress-key-v1-do-not-share!";
+const PROGRESS_STR: &str = env!("PROGRESS_KEY");
+const PROGRESS_KEY: [u8; 32] = unsafe { *PROGRESS_STR.as_ptr().cast::<[u8; 32]>() }; // ok due to build.rs checking key size | safe "tryinto" error as not yet stable on const traits
 
 /// Filename of the encrypted progress file, stored alongside `lq.toml`.
 pub const PROGRESS_FILE: &str = ".lq.progress";

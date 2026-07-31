@@ -566,6 +566,9 @@ lq seal-solutions --repo /path/to/repo
 | `anyhow` | Error propagation |
 | `thiserror` | Typed domain errors |
 
+### Build dependencies
+| `dotenvy` | Load `.env` file for secret keys |
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
