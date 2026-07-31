@@ -24,7 +24,8 @@ use crate::crypto;
 /// Embedded key used to seal solution files (everything under a `solution/` dir).
 ///
 /// Distinct from the progress/attestation keys so the concerns stay separated.
-const SOLUTION_KEY: [u8; 32] = *b"lq-solution-key-v1-classroom-ok!";
+const SOLUTION_STR: &str = env!("SOLUTION_KEY");
+const SOLUTION_KEY: [u8; 32] = unsafe { *SOLUTION_STR.as_ptr().cast::<[u8; 32]>() }; // ok due to build.rs checking key size | safe "tryinto" error as not yet stable on const traits
 
 /// Read a file that may be plaintext or sealed, returning its text contents.
 ///

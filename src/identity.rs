@@ -20,7 +20,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 /// Embedded key used to seal the local attestation cache.
-const ATTEST_KEY: [u8; 32] = *b"lq-attestation-key-v1-keep-safe!";
+const ATTEST_STR: &str = env!("ATTEST_KEY");
+const ATTEST_KEY: [u8; 32] = unsafe { *ATTEST_STR.as_ptr().cast::<[u8; 32]>() }; // ok due to build.rs checking key size | safe "tryinto" error as not yet stable on const traits
 
 /// Filename of the machine-bound attestation cache, alongside `lq.toml`.
 pub const ATTEST_FILE: &str = ".lq.attest";
