@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 fn main() {
   // Find files for build
-  let project_root = std::env::var("CARGO_MANIFEST_DIR").expect("Impossible de lire CARGO_MANIFEST_DIR");
+  let project_root = std::env::var("CARGO_MANIFEST_DIR").expect("Impossible to read CARGO_MANIFEST_DIR");
   let project_path = PathBuf::from(project_root);
   let env_path = project_path.join(".env");
   let template_path = project_path.join(".env.template");
@@ -17,10 +17,9 @@ fn main() {
   if !env_path.exists() {
     if template_path.exists() {
       fs::copy(&template_path, &env_path).unwrap();
-      // Affiche un avertissement jaune dans le terminal de compilation Cargo
       println!("cargo:warning=⚠️  The .env file was missing. A new file has been created automatically from .env.template.");
     } else {
-      panic!("❌ Error :the .env and .env.template files are both missing from {}", project_path.display());
+      panic!("❌ Error : The .env and .env.template files are both missing from {}", project_path.display());
     }
   }
 
