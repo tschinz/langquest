@@ -44,15 +44,28 @@ fn main() {
   for key in keys {
     let value = std::env::var(key)
       .ok()
-      .or_else(|| dotenv_values.get(key).cloned())
-      .or_else(|| {
-        println!("cargo:warning=⚠️ Using fallback value from .env.template for {}", key);
-        dotenv_template_values.get(key).cloned()
+      .inspect(|_| {
+        println!("cargo:warning=👌 Using value from environment variables for {}", key);
       })
-      .unwrap_or_else(|| panic!("❌ Compilation error : The key '{}' is missing in your environment and .env file.", key));
+      .or_else(|| {
+        dotenv_values.get(key).cloned().inspect(|_| {
+          println!("cargo:warning=👌 Using value from .env for {}", key);
+        })
+      })
+      .or_else(|| {
+        dotenv_template_values.get(key).cloned().inspect(|_| {
+          println!("cargo:warning=⚠️  Using value from .env.template for {}", key);
+        })
+      })
+      .unwrap_or_else(|| {
+        panic!(
+          "❌ Compilation error : The key '{}' is missing in your environment, .env and .env.example files",
+          key
+        )
+      });
     if value.len() != 32 {
       panic!(
-        "❌ Compilation error : The key '{}' must be exactly 32 bytes long (current length: {} bytes).",
+        "❌ Compilation error : The key '{}' must be exactly 32 bytes long (current length: {} bytes)",
         key,
         value.len()
       );
