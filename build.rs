@@ -4,19 +4,23 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 fn main() {
+  let keys = ["PROGRESS_KEY", "ATTEST_KEY", "SOLUTION_KEY"];
+
   // Find files for build
   let project_root = std::env::var("CARGO_MANIFEST_DIR").expect("Impossible to read CARGO_MANIFEST_DIR");
   let project_path = PathBuf::from(project_root);
   let env_path = project_path.join(".env");
+  let template_env_path = project_path.join(".env.template");
 
   // Forces recompilation if variables or .env changed, even without code changes
   println!("cargo:rerun-if-changed={}", env_path.display());
-  for key in ["PROGRESS_KEY", "ATTEST_KEY", "SOLUTION_KEY"] {
+  println!("cargo:rerun-if-changed={}", template_env_path.display());
+  for key in keys {
     println!("cargo:rerun-if-env-changed={}", key);
   }
 
-  let keys = ["PROGRESS_KEY", "ATTEST_KEY", "SOLUTION_KEY"];
   let mut dotenv_values = HashMap::new();
+  let mut dotenv_template_values = HashMap::new();
 
   // Check for local .env file - existing env vars are still preferred over .env values
   if env_path.exists() {
@@ -26,11 +30,25 @@ fn main() {
     }
   }
 
+  // Check for local .env.template file - existing env vars are still preferred over .env values
+  if template_env_path.exists() {
+    for entry in dotenvy::from_path_iter(&template_env_path)
+      .unwrap_or_else(|_| panic!("❌ Impossible to load the .env.template file from : {}", template_env_path.display()))
+    {
+      let (key, value) = entry.unwrap_or_else(|_| panic!("❌ Impossible to read an entry from : {}", template_env_path.display()));
+      dotenv_template_values.insert(key, value);
+    }
+  }
+
   // Retrieve keys
   for key in keys {
     let value = std::env::var(key)
       .ok()
       .or_else(|| dotenv_values.get(key).cloned())
+      .or_else(|| {
+        println!("cargo:warning=⚠️ Using fallback value from .env.template for {}", key);
+        dotenv_template_values.get(key).cloned()
+      })
       .unwrap_or_else(|| panic!("❌ Compilation error : The key '{}' is missing in your environment and .env file.", key));
     if value.len() != 32 {
       panic!(
