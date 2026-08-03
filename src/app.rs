@@ -583,7 +583,6 @@ impl App {
         // 'o' only works from ExerciseView to go to Overview
         if self.view == View::ExerciseView {
           self.view = View::Overview;
-          self.overview_cursor = 0;
           self.scroll_offset = 0;
           self.needs_redraw = true;
         }
@@ -709,7 +708,6 @@ impl App {
     match self.view {
       View::ExerciseView => {
         self.view = View::Overview;
-        self.overview_cursor = 0;
         self.scroll_offset = 0;
       }
       View::Overview => {
