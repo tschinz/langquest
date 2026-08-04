@@ -34,7 +34,7 @@ const MAX_CONTENT_WIDTH: u16 = 72;
 /// Render the About page and return the OSC 8 link data to be applied after
 /// [`Terminal::draw`] returns.
 ///
-/// The content is placed in a column of at most [`MAX_CONTENT_WIDTH`] columns,
+/// The content is placed in a column of at most `MAX_CONTENT_WIDTH` columns,
 /// centred horizontally.  When the rendered content fits inside `area` without
 /// scrolling it is also centred vertically.
 ///

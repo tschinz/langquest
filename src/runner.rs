@@ -56,7 +56,7 @@ pub struct VerificationResult {
   pub passed: usize,
   /// Total number of tests / checks.
   pub total: usize,
-  /// Combined stdout + stderr output, capped to the last [`MAX_OUTPUT_LINES`] lines.
+  /// Combined stdout + stderr output, capped to the last `MAX_OUTPUT_LINES` lines.
   pub output: String,
   /// Language-specific pass threshold for this exercise.
   pub threshold: f64,

@@ -99,9 +99,8 @@ impl Language {
 
   /// Syntect language token used for syntax highlighting.
   ///
-  /// Passed to [`highlight_code_block`](crate::ui::markdown::highlight_code_block)
-  /// when rendering the solution source file. An empty string means plain
-  /// text (no highlighting).
+  /// Passed to `highlight_code_block` when rendering the solution source file.
+  /// An empty string means plain text (no highlighting).
   pub fn syntax_token(&self) -> &'static str {
     match self {
       Language::Rust => "rust",

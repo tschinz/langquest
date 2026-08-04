@@ -13,6 +13,10 @@ exclude = [
   ".github",
   "tasks",
   "claude.md",
+  "ripes",   # ~200 MB of bundled Ripes binaries; needed at runtime, not to build
+  "tests",   # test fixtures / sample repo
+  "docs",
+  "img",
 ]
 
 [lib]
