@@ -43,3 +43,6 @@ tests/sample-repo/**/*.png
 # written into the *exercise* repo and should be TRACKED there so it syncs across
 # a student's machines — see README "Progress, identity & syncing".
 .lq.attest
+
+
+tests/sample-repo/.lq.progress
