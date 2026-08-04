@@ -3,6 +3,8 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use sha2::{Digest, Sha256};
+
 fn main() {
   let keys = ["PROGRESS_KEY", "ATTEST_KEY", "SOLUTION_KEY"];
 
@@ -63,13 +65,16 @@ fn main() {
           key
         )
       });
-    if value.len() != 32 {
-      panic!(
-        "❌ Compilation error : The key '{}' must be exactly 32 bytes long (current length: {} bytes)",
-        key,
-        value.len()
-      );
-    }
+
+    // Only if the key isn't 32 bytes long, transform it
+    let value: String = if value.len() != 32 {
+      // Hash, encode and truncate the secret to allow secrets of arbitrary length
+      let digest = Sha256::digest(value.as_bytes());
+      format!("{:.32}", hex::encode_upper(digest))
+    } else {
+      value
+    };
+
     // Inject inside compiler
     println!("cargo:rustc-env={}={}", key, value);
   }
