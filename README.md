@@ -493,7 +493,6 @@ hints    = [
 ]
 keywords = ["mut", "let", "i32"]
 ---
-```
 
 ## Explanation
 
