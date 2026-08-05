@@ -15,6 +15,8 @@ A terminal-based, interactive programming exercise runner. Inspired by [Rustling
 - [Features](#features)
 - [Installation](#installation)
   - [Installing lq](#installing-lq)
+  - [Installing the Latest GitHub Release (HEI)](#installing-the-latest-github-release-HEI)
+  - [Uninstalling the Release-Installed Binary](#uninstalling-the-release-installed-binary)
   - [Exercise Toolchains](#exercise-toolchains)
 - [Getting Started](#getting-started)
   - [Creating Your Exercise Repository](#creating-your-exercise-repository)
@@ -57,6 +59,120 @@ cargo run -- --repo /path/to/exercises
 # of via crates.io
 cargo install langquest
 lq --repo /path/to/exercises
+```
+
+### Installing the Latest GitHub Release (HEI)
+
+LangQuest embeds encryption/sealing keys at build time. For classroom/student consistency you usually want the exact CI-produced binary from GitHub Releases, not a local source build that may embed different keys.
+
+The `scripts/install_latest_release.xx` scripts download the **latest release** from `https://github.com/tschinz/langquest/releases` which contain custom keys used within the HEI courses.
+
+They auto-detect the platform/architecture, fetch the matching asset, install the binary, and print the resulting version.
+
+#### macOS / Linux
+
+Run:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/tschinz/langquest/refs/heads/main/scripts/install_latest_release.sh | sh
+```
+
+Default install path:
+
+- `~/.local/bin/lq`
+
+Override install path:
+
+```sh
+INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/tschinz/langquest/refs/heads/main/scripts/install_latest_release.sh | sh
+```
+
+Script file:
+
+- `scripts/install_latest_release.sh`
+
+#### Windows (PowerShell)
+
+Run:
+
+```powershell
+irm https://raw.githubusercontent.com/tschinz/langquest/refs/heads/main/scripts/install_latest_release.ps1 | iex
+```
+
+Default install path:
+
+- `%LOCALAPPDATA%\Programs\lq\bin\lq.exe`
+
+Override install path:
+
+```powershell
+$env:INSTALL_DIR = 'C:\\Tools\\lq\\bin'
+irm https://raw.githubusercontent.com/tschinz/langquest/refs/heads/main/scripts/install_latest_release.ps1 | iex
+```
+
+Script file:
+
+- `scripts/install_latest_release.ps1`
+
+#### Notes
+
+- The installer scripts use GitHub's `releases/latest` metadata and do not require you to specify a tag manually.
+- If the install directory is not already on your `PATH`, the script adds it.
+
+### Uninstalling the Release-Installed Binary
+
+If you installed with the release scripts, uninstall by removing the installed binary from the install directory.
+
+#### macOS / Linux
+
+Default uninstall:
+
+```sh
+rm -f ~/.local/bin/lq
+```
+
+If you installed with a custom path, remove it from that directory instead:
+
+```sh
+rm -f /your/custom/install/dir/lq
+```
+
+Optional PATH cleanup in startup files (only if you no longer want the path):
+
+```sh
+sed -i.bak '/# Added by lq installer/,+1d' ~/.bashrc ~/.bash_profile ~/.zshrc ~/.zprofile ~/.profile 2>/dev/null || true
+```
+
+#### Windows (PowerShell)
+
+Default uninstall:
+
+```powershell
+Remove-Item "$env:LOCALAPPDATA\Programs\lq\bin\lq.exe" -Force -ErrorAction SilentlyContinue
+```
+
+If you installed with a custom path, remove that file instead:
+
+```powershell
+Remove-Item "C:\\your\\custom\\install\\dir\\lq.exe" -Force
+```
+
+Optional PATH cleanup (remove the installer path from user PATH):
+
+```powershell
+$dir = Join-Path $env:LOCALAPPDATA "Programs\lq\bin"
+$paths = ([Environment]::GetEnvironmentVariable("Path", "User") -split ';') | Where-Object { $_ -and $_ -ne $dir }
+[Environment]::SetEnvironmentVariable("Path", ($paths -join ';'), "User")
+```
+
+#### Verify Uninstall
+
+```sh
+command -v lq || echo "lq not found"
+```
+
+```powershell
+Get-Command lq -ErrorAction SilentlyContinue
 ```
 
 ### Exercise Toolchains
@@ -526,6 +642,7 @@ Options:
       --repo <REPO>  Path to exercise repository root
       --reset        Wipe all progress in lq.toml and start fresh
   -s, --stats        Display detailed statistics about exercise progress
+  -k, --keys         Print version and hashes of embedded crypto keys
   -h, --help         Print help
   -V, --version      Print version
 ```
@@ -542,6 +659,9 @@ lq status
 # Detailed progress statistics + write machine-readable results.toml
 # (teachers can run this on any student repo)
 lq -s --repo /path/to/student-repo
+
+# Print lq version + SHA-256 fingerprints of embedded crypto keys
+lq --keys
 
 # Reset all progress (prompts for confirmation)
 lq --reset
