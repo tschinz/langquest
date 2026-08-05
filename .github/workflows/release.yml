@@ -82,6 +82,9 @@ jobs:
       - name: Build binary
         run: cargo build --release --target ${{ matrix.target }}
         env:
+          ATTEST_KEY: ${{ secrets.ATTEST_KEY }}
+          PROGRESS_KEY: ${{ secrets.PROGRESS_KEY }}
+          SOLUTION_KEY: ${{ secrets.SOLUTION_KEY }}
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
 
       - name: Package binary (Unix)
