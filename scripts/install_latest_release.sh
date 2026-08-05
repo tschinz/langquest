@@ -84,7 +84,7 @@ case ":$PATH:" in
     ;;
   *)
     echo "Note: $INSTALL_DIR is not in PATH for new shells yet."
-    PATH_LINE="export PATH=\"$INSTALL_DIR:\$PATH\""
+    PATH_LINE="case \":\$PATH:\" in *\":$INSTALL_DIR:\"*) ;; *) export PATH=\"\$PATH:$INSTALL_DIR\";; esac"
 
     if [ -n "${PROFILE_FILE:-}" ]; then
       PROFILES="$PROFILE_FILE"

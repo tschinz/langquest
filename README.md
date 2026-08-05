@@ -16,6 +16,7 @@ A terminal-based, interactive programming exercise runner. Inspired by [Rustling
 - [Installation](#installation)
   - [Installing lq](#installing-lq)
   - [Installing the Latest GitHub Release (HEI)](#installing-the-latest-github-release-HEI)
+  - [Uninstalling the Release-Installed Binary](#uninstalling-the-release-installed-binary)
   - [Exercise Toolchains](#exercise-toolchains)
 - [Getting Started](#getting-started)
   - [Creating Your Exercise Repository](#creating-your-exercise-repository)
@@ -73,7 +74,7 @@ They auto-detect the platform/architecture, fetch the matching asset, install th
 Run:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/tschinz/langquest/main/scripts/install_latest_release.sh | sh
+curl -fsSL https://raw.githubusercontent.com/tschinz/langquest/refs/heads/main/scripts/install_latest_release.sh | sh
 ```
 
 Default install path:
@@ -83,7 +84,7 @@ Default install path:
 Override install path:
 
 ```sh
-INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/tschinz/langquest/main/scripts/install_latest_release.sh | sh
+INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/tschinz/langquest/refs/heads/main/scripts/install_latest_release.sh | sh
 ```
 
 Script file:
@@ -95,7 +96,7 @@ Script file:
 Run:
 
 ```powershell
-irm https://raw.githubusercontent.com/tschinz/langquest/main/scripts/install_latest_release.ps1 | iex
+irm https://raw.githubusercontent.com/tschinz/langquest/refs/heads/main/scripts/install_latest_release.ps1 | iex
 ```
 
 Default install path:
@@ -106,7 +107,7 @@ Override install path:
 
 ```powershell
 $env:INSTALL_DIR = 'C:\\Tools\\lq\\bin'
-irm https://raw.githubusercontent.com/tschinz/langquest/main/scripts/install_latest_release.ps1 | iex
+irm https://raw.githubusercontent.com/tschinz/langquest/refs/heads/main/scripts/install_latest_release.ps1 | iex
 ```
 
 Script file:
@@ -117,6 +118,62 @@ Script file:
 
 - The installer scripts use GitHub's `releases/latest` metadata and do not require you to specify a tag manually.
 - If the install directory is not already on your `PATH`, the script adds it.
+
+### Uninstalling the Release-Installed Binary
+
+If you installed with the release scripts, uninstall by removing the installed binary from the install directory.
+
+#### macOS / Linux
+
+Default uninstall:
+
+```sh
+rm -f ~/.local/bin/lq
+```
+
+If you installed with a custom path, remove it from that directory instead:
+
+```sh
+rm -f /your/custom/install/dir/lq
+```
+
+Optional PATH cleanup in startup files (only if you no longer want the path):
+
+```sh
+sed -i.bak '/# Added by lq installer/,+1d' ~/.bashrc ~/.bash_profile ~/.zshrc ~/.zprofile ~/.profile 2>/dev/null || true
+```
+
+#### Windows (PowerShell)
+
+Default uninstall:
+
+```powershell
+Remove-Item "$env:LOCALAPPDATA\Programs\lq\bin\lq.exe" -Force -ErrorAction SilentlyContinue
+```
+
+If you installed with a custom path, remove that file instead:
+
+```powershell
+Remove-Item "C:\\your\\custom\\install\\dir\\lq.exe" -Force
+```
+
+Optional PATH cleanup (remove the installer path from user PATH):
+
+```powershell
+$dir = Join-Path $env:LOCALAPPDATA "Programs\lq\bin"
+$paths = ([Environment]::GetEnvironmentVariable("Path", "User") -split ';') | Where-Object { $_ -and $_ -ne $dir }
+[Environment]::SetEnvironmentVariable("Path", ($paths -join ';'), "User")
+```
+
+#### Verify Uninstall
+
+```sh
+command -v lq || echo "lq not found"
+```
+
+```powershell
+Get-Command lq -ErrorAction SilentlyContinue
+```
 
 ### Exercise Toolchains
 
