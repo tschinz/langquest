@@ -25,7 +25,7 @@ struct Cli {
   stats: bool,
 
   /// Print version and hashes of embedded crypto keys, then exit
-  #[arg(short = 'v', long)]
+  #[arg(short = 'k', long)]
   keys: bool,
 
   #[command(subcommand)]
