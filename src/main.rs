@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use lq::{app, config, exercise, stats};
+use sha2::{Digest, Sha256};
 
 /// CLI definition for the `lq` binary.
 #[derive(Parser)]
@@ -23,6 +24,10 @@ struct Cli {
   #[arg(short = 's', long)]
   stats: bool,
 
+  /// Print version and hashes of embedded crypto keys, then exit
+  #[arg(short = 'v', long)]
+  keys: bool,
+
   #[command(subcommand)]
   command: Option<Command>,
 }
@@ -39,6 +44,10 @@ enum Command {
 fn main() -> Result<()> {
   let cli = Cli::parse();
 
+  if cli.keys {
+    return handle_keys();
+  }
+
   if cli.reset {
     return handle_reset(cli.repo);
   }
@@ -52,6 +61,33 @@ fn main() -> Result<()> {
     Some(Command::SealSolutions) => handle_seal_solutions(cli.repo),
     None => handle_default(cli.repo),
   }
+}
+
+/// Handle `-k` / `--keys`: print the binary version and deterministic hashes
+/// of the three embedded crypto keys.
+fn handle_keys() -> Result<()> {
+  const PROGRESS_KEY: &str = env!("PROGRESS_KEY");
+  const ATTEST_KEY: &str = env!("ATTEST_KEY");
+  const SOLUTION_KEY: &str = env!("SOLUTION_KEY");
+
+  fn hex_sha256(input: &[u8]) -> String {
+    let mut h = Sha256::new();
+    h.update(input);
+    let digest = h.finalize();
+    let mut out = String::with_capacity(digest.len() * 2);
+    for b in digest {
+      use std::fmt::Write as _;
+      let _ = write!(&mut out, "{b:02x}");
+    }
+    out
+  }
+
+  println!("lq version: {}", env!("CARGO_PKG_VERSION"));
+  println!("progress_key_sha256: {}", hex_sha256(PROGRESS_KEY.as_bytes()));
+  println!("attest_key_sha256:   {}", hex_sha256(ATTEST_KEY.as_bytes()));
+  println!("solution_key_sha256: {}", hex_sha256(SOLUTION_KEY.as_bytes()));
+
+  Ok(())
 }
 
 /// Handle `seal-solutions`: encrypt every file under each `solution/` directory

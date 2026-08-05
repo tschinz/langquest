@@ -642,6 +642,7 @@ Options:
       --repo <REPO>  Path to exercise repository root
       --reset        Wipe all progress in lq.toml and start fresh
   -s, --stats        Display detailed statistics about exercise progress
+  -k, --keys         Print version and hashes of embedded crypto keys
   -h, --help         Print help
   -V, --version      Print version
 ```
@@ -658,6 +659,9 @@ lq status
 # Detailed progress statistics + write machine-readable results.toml
 # (teachers can run this on any student repo)
 lq -s --repo /path/to/student-repo
+
+# Print lq version + SHA-256 fingerprints of embedded crypto keys
+lq --keys
 
 # Reset all progress (prompts for confirmation)
 lq --reset
