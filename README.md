@@ -15,6 +15,7 @@ A terminal-based, interactive programming exercise runner. Inspired by [Rustling
 - [Features](#features)
 - [Installation](#installation)
   - [Installing lq](#installing-lq)
+  - [Installing the Latest GitHub Release (HEI)](#installing-the-latest-github-release-HEI)
   - [Exercise Toolchains](#exercise-toolchains)
 - [Getting Started](#getting-started)
   - [Creating Your Exercise Repository](#creating-your-exercise-repository)
@@ -58,6 +59,64 @@ cargo run -- --repo /path/to/exercises
 cargo install langquest
 lq --repo /path/to/exercises
 ```
+
+### Installing the Latest GitHub Release (HEI)
+
+LangQuest embeds encryption/sealing keys at build time. For classroom/student consistency you usually want the exact CI-produced binary from GitHub Releases, not a local source build that may embed different keys.
+
+The `scripts/install_latest_release.xx` scripts download the **latest release** from `https://github.com/tschinz/langquest/releases` which contain custom keys used within the HEI courses.
+
+They auto-detect the platform/architecture, fetch the matching asset, install the binary, and print the resulting version.
+
+#### macOS / Linux
+
+Run:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/tschinz/langquest/main/scripts/install_latest_release.sh | sh
+```
+
+Default install path:
+
+- `~/.local/bin/lq`
+
+Override install path:
+
+```sh
+INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/tschinz/langquest/main/scripts/install_latest_release.sh | sh
+```
+
+Script file:
+
+- `scripts/install_latest_release.sh`
+
+#### Windows (PowerShell)
+
+Run:
+
+```powershell
+irm https://raw.githubusercontent.com/tschinz/langquest/main/scripts/install_latest_release.ps1 | iex
+```
+
+Default install path:
+
+- `%LOCALAPPDATA%\Programs\lq\bin\lq.exe`
+
+Override install path:
+
+```powershell
+$env:INSTALL_DIR = 'C:\\Tools\\lq\\bin'
+irm https://raw.githubusercontent.com/tschinz/langquest/main/scripts/install_latest_release.ps1 | iex
+```
+
+Script file:
+
+- `scripts/install_latest_release.ps1`
+
+#### Notes
+
+- The installer scripts use GitHub's `releases/latest` metadata and do not require you to specify a tag manually.
+- If the install directory is not already on your `PATH`, the script adds it.
 
 ### Exercise Toolchains
 
