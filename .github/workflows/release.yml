@@ -52,6 +52,10 @@ jobs:
             os: ubuntu-latest
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
           - target: x86_64-pc-windows-msvc
             os: windows-latest
           - target: x86_64-apple-darwin
@@ -73,19 +77,25 @@ jobs:
         with:
           key: ${{ matrix.target }}
 
-      - name: Install cross-compilation tools (Linux ARM64)
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
+      - name: Install cross (Linux)
+        if: runner.os == 'Linux'
+        uses: taiki-e/install-action@cross
 
-      - name: Build binary
+      - name: Build binary (Linux targets)
+        if: runner.os == 'Linux'
+        run: cross build --release --target ${{ matrix.target }}
+        env:
+          ATTEST_KEY: ${{ secrets.ATTEST_KEY }}
+          PROGRESS_KEY: ${{ secrets.PROGRESS_KEY }}
+          SOLUTION_KEY: ${{ secrets.SOLUTION_KEY }}
+
+      - name: Build binary (non-Linux targets)
+        if: runner.os != 'Linux'
         run: cargo build --release --target ${{ matrix.target }}
         env:
           ATTEST_KEY: ${{ secrets.ATTEST_KEY }}
           PROGRESS_KEY: ${{ secrets.PROGRESS_KEY }}
           SOLUTION_KEY: ${{ secrets.SOLUTION_KEY }}
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
 
       - name: Package binary (Unix)
         if: matrix.os != 'windows-latest'
