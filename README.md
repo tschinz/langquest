@@ -686,7 +686,14 @@ lq seal-solutions --repo /path/to/repo
 | `thiserror` | Typed domain errors |
 
 ### Build dependencies
+| Crate | Purpose |
+|-------|---------|
 | `dotenvy` | Load `.env` file for secret keys |
+
+### Test dependencies
+| Project name | Purpose |
+|--------------|---------|
+| [`catch2`](https://github.com/catchorg/Catch2) | For C++ tests |
 
 ## License
 
