@@ -15,8 +15,12 @@ fn main() {
   let template_env_path = project_path.join(".env.template");
 
   // Forces recompilation if variables or .env changed, even without code changes
-  println!("cargo:rerun-if-changed={}", env_path.display());
-  println!("cargo:rerun-if-changed={}", template_env_path.display());
+  if env_path.exists() {
+    println!("cargo:rerun-if-changed={}", env_path.display());
+  }
+  if template_env_path.exists() {
+    println!("cargo:rerun-if-changed={}", template_env_path.display());
+  }
   for key in keys {
     println!("cargo:rerun-if-env-changed={}", key);
   }
