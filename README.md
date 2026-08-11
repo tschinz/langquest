@@ -303,6 +303,10 @@ contains the bound student identity, overall and per-module summaries, and a
 per-exercise record (`passed`, `best_score`, `solution_seen`, hint counts, …):
 
 ```toml
+[meta]
+generated_at = 1786454786
+lq_version = "0.1.0"
+
 [student]
 verified = true
 login = "alice"
@@ -313,17 +317,35 @@ total_exercises = 9
 completed = 7
 tests_passed = 38     # unit tests passed across all exercises …
 tests_total = 45      # … out of this many — enables partial-credit grading
+solutions_seen = 0
+hints_shown = 0
+hints_explored = 0
+hints_total = 171
 average_best_score = 0.82
+times_saved = 21
+
+[modules.01-intro]
+total = 3
+completed = 2
+tests_passed = 11
+tests_total = 13
+solutions_seen = 0
+hints_shown = 2
+times_saved = 21
+average_best_score = 0.85
 
 [[exercises]]
 path = "01-rust/01-hello-world"
+name = "Hello world!"
 language = "rust"
+difficulty = 1
 passed = true
 best_score = 1.0
 tests_passed = 3      # per-exercise test counts (from the last/best run)
 tests_total = 3
 solution_seen = false
 hints_shown = 0
+times_saved = 10
 hints_revealed = 0
 hints_total = 3
 ```
