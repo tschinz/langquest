@@ -24,6 +24,7 @@ pub struct PerModuleStats {
   pub completed: usize,
   pub solutions_seen: usize,
   pub hints_shown: usize,
+  pub times_saved: u32,
   pub hints_max_sum: usize,
   pub hints_total_sum: usize,
   pub best_score_sum: f64,
@@ -47,6 +48,7 @@ pub struct Report {
   pub completed: usize,
   pub solutions_seen: usize,
   pub hints_shown: usize,
+  pub times_saved: u32,
   pub hints_max_sum: usize,
   pub hints_total_sum: usize,
   pub best_score_sum: f64,
@@ -111,6 +113,7 @@ struct Summary {
   hints_total: usize,
   /// Mean of per-exercise best scores in `[0.0, 1.0]`.
   average_best_score: f64,
+  times_saved: u32,
 }
 
 /// Per-module aggregate.
@@ -122,6 +125,7 @@ struct ModuleResult {
   tests_total: usize,
   solutions_seen: usize,
   hints_shown: usize,
+  times_saved: u32,
   average_best_score: f64,
 }
 
@@ -141,6 +145,8 @@ struct ExerciseResult {
   solution_seen: bool,
   /// Cumulative hint presses recorded for this exercise.
   hints_shown: usize,
+  /// How many times the user saved the excercise.
+  times_saved: u32,
   /// Furthest hint level reached.
   hints_revealed: usize,
   /// Total hints available for this exercise.
@@ -168,6 +174,7 @@ fn build_results(cfg: &ProjectConfig, all_exercises: &[exercise::Exercise]) -> R
         tests_total: if ex.test_count > 0 { ex.test_count } else { state.tests_total },
         solution_seen: state.solution_seen,
         hints_shown: state.hints_shown,
+        times_saved: state.times_saved,
         hints_revealed,
         hints_total,
       }
@@ -187,6 +194,7 @@ fn build_results(cfg: &ProjectConfig, all_exercises: &[exercise::Exercise]) -> R
           tests_total: m.tests_total_sum,
           solutions_seen: m.solutions_seen,
           hints_shown: m.hints_shown,
+          times_saved: m.times_saved,
           average_best_score: if m.total > 0 { m.best_score_sum / m.total as f64 } else { 0.0 },
         },
       )
@@ -211,6 +219,7 @@ fn build_results(cfg: &ProjectConfig, all_exercises: &[exercise::Exercise]) -> R
       tests_total: report.tests_total_sum,
       solutions_seen: report.solutions_seen,
       hints_shown: report.hints_shown,
+      times_saved: report.times_saved,
       hints_explored: report.hints_max_sum,
       hints_total: report.hints_total_sum,
       average_best_score: if report.total_exercises > 0 {
@@ -290,6 +299,9 @@ fn compute(cfg: &ProjectConfig, all_exercises: &[exercise::Exercise]) -> Report 
 
     report.hints_shown += state.hints_shown;
     stats.hints_shown += state.hints_shown;
+
+    report.times_saved += state.times_saved;
+    stats.times_saved += state.times_saved;
 
     // Total available hints come from the exercise definition (`solution.md`),
     // so the denominator is correct even before the exercise has ever been
@@ -383,6 +395,7 @@ fn render(report: &Report) {
       println!("      Solutions seen:     {} ({:.1}%)", s.solutions_seen, pct(s.solutions_seen, s.total));
       println!("      Hints revealed:     {} total presses", s.hints_shown);
       println!("      Hints explored:     {}", fmt_hints(s.hints_max_sum, s.hints_total_sum));
+      println!("      Times saved:        {}", s.times_saved);
       if s.total > 0 {
         println!("      Average best score: {:.1}%", s.best_score_sum / s.total as f64 * 100.0);
       }
@@ -456,6 +469,7 @@ mod tests {
     assert_eq!(report.completed, 0);
     assert_eq!(report.solutions_seen, 0);
     assert_eq!(report.hints_shown, 0);
+    assert_eq!(report.times_saved, 0);
     assert_eq!(report.hints_max_sum, 0);
     assert_eq!(report.hints_total_sum, 0);
     assert_eq!(report.best_score_sum, 0.0);
@@ -472,6 +486,7 @@ mod tests {
     assert_eq!(report.completed, 0);
     assert_eq!(report.solutions_seen, 0);
     assert_eq!(report.hints_shown, 0);
+    assert_eq!(report.times_saved, 0);
     assert_eq!(report.best_score_sum, 0.0);
 
     let m = report.by_module.get("01-rust").unwrap();

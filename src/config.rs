@@ -35,6 +35,9 @@ pub struct ExerciseState {
   /// the second is the total number of hints for this exercise.
   #[serde(default, skip_serializing_if = "String::is_empty")]
   pub hints_max: String,
+  /// Amount of times the student save the file and a regrading occured.
+  #[serde(default)]
+  pub times_saved: u32,
   /// Total number of unit tests / checks in this exercise, from the most recent
   /// verification (0 until first verified).
   #[serde(default)]
@@ -53,6 +56,7 @@ impl Default for ExerciseState {
       solution_seen: false,
       hints_shown: 0,
       hints_max: String::new(),
+      times_saved: 0,
       tests_total: 0,
       best_tests_passed: 0,
     }
@@ -522,6 +526,11 @@ impl ProjectConfig {
     }
   }
 
+  /// Increment the save counter for an exercise.
+  pub fn record_save(&mut self, exercise_path: &str) {
+    self.exercises.entry(exercise_path.to_owned()).or_default().times_saved += 1;
+  }
+
   /// Record a hint reveal, but only if the exercise has **not** been passed.
   ///
   /// Once an exercise is solved, revealing hints for study is "free" and does
@@ -714,6 +723,19 @@ mod tests {
     cfg.update_score("passed-ex", 1.0, 0.7);
     assert!(!cfg.mark_solution_seen_if_unpassed("passed-ex"));
     assert!(!cfg.get_state("passed-ex").solution_seen);
+  }
+
+  #[test]
+  fn default_times_saved_0() {
+    let cfg = ProjectConfig::default();
+    assert_eq!(cfg.get_state("ex").times_saved, 0);
+  }
+
+  #[test]
+  fn record_save_normal_case() {
+    let mut cfg = ProjectConfig::default();
+    cfg.record_save("ex");
+    assert_eq!(cfg.get_state("ex").times_saved, 1);
   }
 
   #[test]

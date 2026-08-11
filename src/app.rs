@@ -122,6 +122,8 @@ pub struct App {
   pub page: ExercisePage,
   /// Number of hints revealed so far for the current exercise.
   pub hints_revealed: usize,
+  /// How many times the student saved this excercise.
+  pub times_saved: u32,
   /// Most recent verification result.
   pub last_result: Option<VerificationResult>,
   /// Captured stdout/stderr from running the exercise's `main()` as a
@@ -221,6 +223,7 @@ impl App {
       view: View::Overview,
       page: ExercisePage::Theory,
       hints_revealed: 0,
+      times_saved: 0,
       last_result: None,
       last_main_output: String::new(),
       overview_cursor: 1,
@@ -504,6 +507,7 @@ impl App {
           self.queue_verify();
           // Regenerate the PNG for PlantUML exercises on save.
           self.maybe_render_plantuml();
+          self.handle_save();
         }
       }
 
@@ -744,6 +748,14 @@ impl App {
     if self.current_index > 0 {
       self.switch_exercise(self.current_index - 1);
     }
+  }
+
+  /// Handle save event
+  fn handle_save(&mut self) {
+    self.times_saved += 1;
+    let path = self.current_exercise().relative_path.clone();
+    self.config.record_save(&path);
+    self.save_config();
   }
 
   /// Reveal the next hint, or - once all hints are shown - prompt the user
