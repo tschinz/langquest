@@ -278,30 +278,45 @@ fn verify_rust(exercise: &Exercise, rust_cfg: &RustConfig, cancel: &VerifyCancel
 
   let out = combined_output(&run);
 
-  // --- parse test results ---------------------------------------------
+  parse_rust_output(&out, threshold)
+}
+
+/// Parse the output of a rust test.
+/// We capture the `ok` values, count them and we catch the amount of tests.
+/// Example input:
+/// ```text
+/// running 4 tests
+/// test tests::test_greet_empty ... ok
+/// test tests::test_greet_simple ... ok
+/// test tests::test_greet_other_name ... ok
+/// test tests::test_hello ... ok
+///
+/// test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+/// ```
+/// Result: 4/4
+fn parse_rust_output(out: &str, threshold: f64) -> VerificationResult {
   let ok_re = match regex::Regex::new(r"test .+ \.\.\. ok") {
     Ok(r) => r,
     Err(e) => {
       return VerificationResult::zero(format!("Internal regex error: {e}"), threshold);
     }
   };
-  let fail_re = match regex::Regex::new(r"test .+ \.\.\. FAILED") {
+  let total_re = match regex::Regex::new(r"running (\d+) tests") {
     Ok(r) => r,
     Err(e) => {
       return VerificationResult::zero(format!("Internal regex error: {e}"), threshold);
     }
   };
 
-  let passed = ok_re.find_iter(&out).count();
-  let failed = fail_re.find_iter(&out).count();
-  let total = passed + failed;
-  let score = if total > 0 { passed as f64 / total as f64 } else { 0.0 };
+  let total: usize = total_re.captures(out).and_then(|c| c.get(1)).and_then(|m| m.as_str().parse().ok()).unwrap_or(0);
 
+  let passed = ok_re.find_iter(out).count();
+  let score = if total > 0 { passed as f64 / total as f64 } else { 0.0 };
   VerificationResult {
     score,
     passed,
     total,
-    output: cap_output(&out, MAX_OUTPUT_LINES),
+    output: cap_output(out, MAX_OUTPUT_LINES),
     threshold,
   }
 }
@@ -2199,4 +2214,64 @@ addi s2, s0, 1
     assert_eq!(r.total, 0);
     assert_eq!(r.score, 0.0);
   }
+}
+
+// -- parse_rust --------------------------------------------------------
+
+#[test]
+fn parse_rust_output_negative() {
+  let out = "some random output\n";
+  let r = parse_rust_output(out, 1.0);
+  assert_eq!(r.total, 0);
+  assert_eq!(r.score, 0.0);
+}
+
+#[test]
+fn parse_rust_output_happy() {
+  let out = r"
+running 4 tests
+test tests::test_greet_empty ... ok
+test tests::test_greet_simple ... ok
+test tests::test_greet_other_name ... ok
+test tests::test_hello ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+";
+  let r = parse_rust_output(out, 4.0);
+  assert_eq!(r.total, 4);
+  assert_eq!(r.score, 1.0);
+}
+
+#[test]
+fn parse_rust_boundary() {
+  let out = r"
+running 4 tests
+test tests::test_greet_empty ... ok
+test tests::test_greet_simple ... ok
+test tests::test_greet_other_name ... ok
+test tests::test_hello ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+";
+
+  let r = parse_rust_output(out, 2.0);
+  assert_eq!(r.total, 4);
+  assert_eq!(r.score, 1.0);
+}
+
+#[test]
+fn parse_cargo_stacktrace() {
+  let out = r"
+    running 4 tests
+test tests::test_greet_other_name ... ok
+test tests::test_greet_empty ... ok
+test tests::test_greet_simple ... ok
+
+thread 'tests::test_hello' (1690703) has overflowed its stack
+fatal runtime error: stack overflow, aborting
+zsh: abort      ./main
+";
+  let r = parse_rust_output(out, 4.0);
+  assert_eq!(r.total, 4);
+  assert_eq!(r.score, 0.75);
 }
