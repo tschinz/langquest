@@ -371,6 +371,7 @@ fn render(report: &Report) {
   println!("  Solutions seen:       {} ({:.1}%)", report.solutions_seen, pct(report.solutions_seen, total));
   println!("  Hints revealed:       {} total presses", report.hints_shown);
   println!("  Hints explored:       {}", fmt_hints(report.hints_max_sum, report.hints_total_sum));
+  println!("  Times saved:          {}", report.times_saved);
 
   if total > 0 {
     println!("  Average best score:   {:.1}%", report.best_score_sum / total as f64 * 100.0);
