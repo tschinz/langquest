@@ -1,8 +1,9 @@
 //! Top-level application state and TUI event loop.
 
 use std::collections::HashSet;
+use std::fs;
 use std::io::BufWriter;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -11,6 +12,7 @@ use std::time::Duration;
 use anyhow::{Result, bail};
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEventKind};
 use ratatui::prelude::*;
+use serde_json::json;
 
 use crate::config::{self, ProjectConfig};
 use crate::exercise::{Exercise, ExerciseStatus, Language, TreeNode, discover_exercises};
@@ -307,7 +309,52 @@ impl App {
     self.setup_watcher();
     self.queue_verify();
     self.maybe_render_plantuml();
+    self.maybe_create_rust_project();
     self.save_config();
+  }
+
+  /// Create the .rust-project.json file.
+  /// if this fails, we don't really care because it's not important right now plus there's very
+  /// little that can actually, realistically fail.
+  fn maybe_create_rust_project(&self) {
+    let exercise = self.current_exercise();
+    if exercise.language != Language::Rust {
+      return;
+    }
+
+    let Ok(sysroot_out) = std::process::Command::new("rustc").arg("--print=sysroot").output() else {
+      return;
+    };
+
+    let relative_sysroot_str: String = ["lib", "rustlib", "src", "rust", "library"].join(std::path::MAIN_SEPARATOR_STR);
+    let relative_sysroot_path = Path::new(&relative_sysroot_str);
+
+    let Ok(sysroot_str) = str::from_utf8(&sysroot_out.stdout) else {
+      return;
+    };
+    let sysroot_str = sysroot_str.trim();
+
+    let sysroot_src_path = Path::new(sysroot_str).join(relative_sysroot_path);
+    let Some(sysroot_src_str) = sysroot_src_path.to_str() else {
+      return;
+    };
+
+    let rust_project_path = exercise.dir.join(".rust-project.json");
+    let json = json!({
+        "sysroot_src": sysroot_src_str,
+        "crates": [
+        {
+            "root_module": "main.rs",
+            "edition": "2024",
+            "deps": [],
+        }
+
+    ]
+
+    });
+    let _ = fs::write(rust_project_path, json.to_string());
+
+    println!("{}", sysroot_src_str);
   }
 
   /// Save config to disk, ignoring errors (best-effort).
