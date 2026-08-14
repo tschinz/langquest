@@ -486,12 +486,12 @@ impl App {
     // Enter alternate screen, enable raw mode, and capture mouse events.
     crossterm::terminal::enable_raw_mode()?;
     crossterm::execute!(
-      std::io::stderr(),
+      std::io::stdout(),
       crossterm::terminal::EnterAlternateScreen,
       crossterm::event::EnableMouseCapture,
     )?;
 
-    let backend = CrosstermBackend::new(BufWriter::new(std::io::stderr()));
+    let backend = CrosstermBackend::new(BufWriter::new(std::io::stdout()));
     let mut terminal = Terminal::new(backend)?;
 
     let result = self.event_loop(&mut terminal);
@@ -499,7 +499,7 @@ impl App {
     // Always restore terminal state, even on error.
     let _ = crossterm::terminal::disable_raw_mode();
     let _ = crossterm::execute!(
-      std::io::stderr(),
+      std::io::stdout(),
       crossterm::terminal::LeaveAlternateScreen,
       crossterm::event::DisableMouseCapture,
     );
@@ -508,7 +508,7 @@ impl App {
   }
 
   /// Inner event loop, separated so cleanup always runs.
-  fn event_loop(&mut self, terminal: &mut Terminal<CrosstermBackend<BufWriter<std::io::Stderr>>>) -> Result<()> {
+  fn event_loop(&mut self, terminal: &mut Terminal<CrosstermBackend<BufWriter<std::io::Stdout>>>) -> Result<()> {
     loop {
       // Check for terminal resize
       let size = terminal.size()?;
@@ -531,7 +531,7 @@ impl App {
         if let Some(ref p) = pending {
           // Use a separate BufWriter for OSC 8 sequences to avoid a double
           // mutable borrow of `terminal` (completed.buffer also borrows it).
-          let mut w = BufWriter::new(std::io::stderr());
+          let mut w = BufWriter::new(std::io::stdout());
           p.write_to(completed.buffer, &mut w)?;
           // BufWriter flushes on drop
         }
