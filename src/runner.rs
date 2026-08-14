@@ -258,9 +258,29 @@ fn verify_rust(exercise: &Exercise, rust_cfg: &RustConfig, cancel: &VerifyCancel
     return VerificationResult::zero(cap_output(&out, MAX_OUTPUT_LINES), threshold);
   }
 
-  // --- run tests (with --nocapture so println! inside tests is visible) -
+  // --- run tests (with --nocapture so println! inside tests is visible) in UI -
+  // This output is not used for score parsing.
   let mut run_cmd = Command::new(&test_bin);
   run_cmd.arg("--nocapture").current_dir(&exercise.dir);
+  let run = run_command_cancellable(&mut run_cmd, cancel);
+
+  let run = match run {
+    Ok(o) => o,
+    Err(RunError::Io(e)) => {
+      return VerificationResult::zero(format!("Failed to execute test binary: {e}"), threshold);
+    }
+    Err(RunError::Cancelled) => {
+      return VerificationResult::zero("Verification cancelled.".to_string(), threshold);
+    }
+  };
+
+  let out_dirty = combined_output(&run);
+
+  // --- run tests a second time without --nocapture -
+  // This is to prevent students from injecting text into the regex parsing logic and is used for
+  // score parsing.
+  let mut run_cmd = Command::new(&test_bin);
+  run_cmd.current_dir(&exercise.dir);
   let run = run_command_cancellable(&mut run_cmd, cancel);
 
   // best-effort cleanup regardless of run outcome
@@ -276,9 +296,13 @@ fn verify_rust(exercise: &Exercise, rust_cfg: &RustConfig, cancel: &VerifyCancel
     }
   };
 
-  let out = combined_output(&run);
+  let out_clean: String = combined_output(&run)
+    .lines()
+    .take_while(|l| !l.starts_with("failures:"))
+    .map(|l| format!("{l}\n"))
+    .collect();
 
-  parse_rust_output(&out, threshold)
+  parse_rust_output(&out_clean, &out_dirty, threshold)
 }
 
 /// Parse the output of a rust test.
@@ -294,7 +318,7 @@ fn verify_rust(exercise: &Exercise, rust_cfg: &RustConfig, cancel: &VerifyCancel
 /// test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 /// ```
 /// Result: 4/4
-fn parse_rust_output(out: &str, threshold: f64) -> VerificationResult {
+fn parse_rust_output(out_clean: &str, out_dirty: &str, threshold: f64) -> VerificationResult {
   let ok_re = match regex::Regex::new(r"test .+ \.\.\. ok") {
     Ok(r) => r,
     Err(e) => {
@@ -308,15 +332,19 @@ fn parse_rust_output(out: &str, threshold: f64) -> VerificationResult {
     }
   };
 
-  let total: usize = total_re.captures(out).and_then(|c| c.get(1)).and_then(|m| m.as_str().parse().ok()).unwrap_or(0);
+  let total: usize = total_re
+    .captures(out_clean)
+    .and_then(|c| c.get(1))
+    .and_then(|m| m.as_str().parse().ok())
+    .unwrap_or(0);
 
-  let passed = ok_re.find_iter(out).count();
+  let passed = ok_re.find_iter(out_clean).count();
   let score = if total > 0 { passed as f64 / total as f64 } else { 0.0 };
   VerificationResult {
     score,
     passed,
     total,
-    output: cap_output(out, MAX_OUTPUT_LINES),
+    output: cap_output(out_dirty, MAX_OUTPUT_LINES),
     threshold,
   }
 }
@@ -2221,7 +2249,7 @@ addi s2, s0, 1
 #[test]
 fn parse_rust_output_negative() {
   let out = "some random output\n";
-  let r = parse_rust_output(out, 1.0);
+  let r = parse_rust_output(out, "irrelevant", 1.0);
   assert_eq!(r.total, 0);
   assert_eq!(r.score, 0.0);
 }
@@ -2237,7 +2265,7 @@ test tests::test_hello ... ok
 
 test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 ";
-  let r = parse_rust_output(out, 4.0);
+  let r = parse_rust_output(out, "irrelevant", 4.0);
   assert_eq!(r.total, 4);
   assert_eq!(r.score, 1.0);
 }
@@ -2254,7 +2282,7 @@ test tests::test_hello ... ok
 test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 ";
 
-  let r = parse_rust_output(out, 2.0);
+  let r = parse_rust_output(out, "irrelevant", 2.0);
   assert_eq!(r.total, 4);
   assert_eq!(r.score, 1.0);
 }
@@ -2271,7 +2299,7 @@ thread 'tests::test_hello' (1690703) has overflowed its stack
 fatal runtime error: stack overflow, aborting
 zsh: abort      ./main
 ";
-  let r = parse_rust_output(out, 4.0);
+  let r = parse_rust_output(out, "irrelevant", 4.0);
   assert_eq!(r.total, 4);
   assert_eq!(r.score, 0.75);
 }
