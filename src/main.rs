@@ -105,15 +105,15 @@ fn handle_seal_solutions(repo: Option<PathBuf>) -> Result<()> {
 fn handle_reset(repo: Option<PathBuf>) -> Result<()> {
   let repo_path = config::resolve_repo_path(repo.as_deref());
 
-  eprintln!("[!] This will delete all progress in lq.toml. This cannot be undone.");
-  eprint!("    Type \"yes\" to confirm, or anything else to cancel: ");
-  std::io::stderr().flush()?;
+  println!("[!] This will delete all progress in lq.toml. This cannot be undone.");
+  print!("    Type \"yes\" to confirm, or anything else to cancel: ");
+  std::io::stdout().flush()?;
 
   let mut input = String::new();
   std::io::stdin().lock().read_line(&mut input)?;
 
   if input.trim() != "yes" {
-    eprintln!("Cancelled.");
+    println!("Cancelled.");
     return Ok(());
   }
 
@@ -157,7 +157,7 @@ fn handle_default(repo: Option<PathBuf>) -> Result<()> {
   eprintln!("   Repository: {}", repo_path.display());
 
   eprint!("   Loading exercises…");
-  std::io::stderr().flush()?;
+  std::io::stdout().flush()?;
   let mut application = app::App::new(repo_path)?;
 
   let total = application.exercises.len();
