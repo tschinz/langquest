@@ -309,14 +309,14 @@ impl App {
     self.setup_watcher();
     self.queue_verify();
     self.maybe_render_plantuml();
-    self.maybe_create_rust_project();
+    self.maybe_create_rust_project_json();
     self.save_config();
   }
 
   /// Create the .rust-project.json file.
   /// if this fails, we don't really care because it's not important right now plus there's very
   /// little that can actually, realistically fail.
-  fn maybe_create_rust_project(&self) {
+  fn maybe_create_rust_project_json(&self) {
     let exercise = self.current_exercise();
     if exercise.language != Language::Rust {
       return;
