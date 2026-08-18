@@ -13,7 +13,7 @@ use sha2::{Digest, Sha256};
 #[command(name = "lq", version, about = "LangQuest - interactive programming exercises")]
 struct Cli {
   /// Path to exercise repository root
-  #[arg(long, global = true)]
+  #[arg(short = 'r', long, global = true)]
   repo: Option<PathBuf>,
 
   /// Wipe all progress in lq.toml and start fresh
