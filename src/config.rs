@@ -300,6 +300,9 @@ pub struct ProjectConfig {
   /// user can customise the command without recompiling.
   #[serde(default)]
   pub ripes: RipesConfig,
+  /// Grade mode: the encrypted progress file is read-only and is therefore skipped by serde.
+  #[serde(skip)]
+  pub grade_mode: bool,
 }
 
 impl ProjectConfig {
@@ -326,6 +329,7 @@ impl ProjectConfig {
       plantuml: commands.plantuml,
       ide: commands.ide,
       ripes: commands.ripes,
+      grade_mode: false,
     })
   }
 
@@ -350,6 +354,7 @@ impl ProjectConfig {
       plantuml: commands.plantuml,
       ide: commands.ide,
       ripes: commands.ripes,
+      grade_mode: false,
     })
   }
 
@@ -417,6 +422,11 @@ impl ProjectConfig {
       path: path.to_path_buf(),
       source: e,
     })?;
+
+    // Grade mode is read-only: never rewrite the encrypted progress file.
+    if self.grade_mode {
+      return Ok(());
+    }
 
     // Encrypted progress -> .lq.progress
     let progress = ProgressFile {
@@ -633,6 +643,23 @@ mod tests {
     assert_eq!(state.hints_shown, 3);
     // Furthest level reached: 3 out of 5
     assert_eq!(state.hints_max, "3/5");
+
+    let _ = fs::remove_dir_all(&dir);
+  }
+
+  #[test]
+  fn grade_mode_never_writes_progress_file() {
+    let dir = std::env::temp_dir().join("lq_test_grade_save");
+    let _ = fs::create_dir_all(&dir);
+    let path = dir.join("lq.toml");
+
+    let mut cfg = ProjectConfig::default();
+    cfg.update_score("01-basics/01-hello", 1.0, 0.7);
+    cfg.grade_mode = true;
+    cfg.save(&path).unwrap();
+
+    // The encrypted progress file should not be modified (or created in this case).
+    assert!(!progress_path(&path).exists());
 
     let _ = fs::remove_dir_all(&dir);
   }

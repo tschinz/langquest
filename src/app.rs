@@ -183,7 +183,7 @@ impl App {
   ///
   /// Returns an error if no exercises are found or if the config cannot be
   /// loaded.
-  pub fn new(repo_path: PathBuf) -> Result<Self> {
+  pub fn new(repo_path: PathBuf, grade_mode: bool) -> Result<Self> {
     let (tree, all_exercises, _errors) = discover_exercises(&repo_path);
 
     if all_exercises.is_empty() {
@@ -192,11 +192,15 @@ impl App {
 
     let cfg_path = config::config_path(&repo_path);
     let mut config = ProjectConfig::load(&cfg_path)?;
+    config.grade_mode = grade_mode;
 
     // Enforce GitHub-identity binding (online, with offline attestation
     // fallback) before exposing any progress. Records the bound owner.
-    let owner = crate::identity::authorize(&repo_path, config.owner.clone()).map_err(|reason| anyhow::anyhow!("progress locked: {reason}"))?;
-    config.owner = Some(owner);
+    if !grade_mode {
+      config.owner = crate::identity::authorize(&repo_path, config.owner.clone())
+        .map(|o| Some(o))
+        .map_err(|reason| anyhow::anyhow!("progress locked: {reason}"))?;
+    }
 
     // Auto-populate a platform-appropriate IDE the first time, so the resolved
     // path is visible and editable in lq.toml (mirrors ripes.bin discovery).

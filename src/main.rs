@@ -32,6 +32,10 @@ struct Cli {
   #[arg(short = 't', long)]
   toolchain: bool,
 
+  /// Grade student; Read-only progress file
+  #[arg(long)]
+  grade: bool,
+
   #[command(subcommand)]
   command: Option<Command>,
 }
@@ -67,7 +71,7 @@ fn main() -> Result<()> {
   match cli.command {
     Some(Command::Status) => handle_status(cli.repo),
     Some(Command::SealSolutions) => handle_seal_solutions(cli.repo),
-    None => handle_default(cli.repo),
+    None => handle_default(cli.repo, cli.grade),
   }
 }
 
@@ -189,9 +193,14 @@ fn handle_toolchain(repo: Option<PathBuf>) -> Result<()> {
 }
 
 /// Default handler (no subcommand, no `--reset`): launch the TUI.
-fn handle_default(repo: Option<PathBuf>) -> Result<()> {
+///
+/// In grade mode the TUI runs normally, but the progress file is ro
+fn handle_default(repo: Option<PathBuf>, grade_mode: bool) -> Result<()> {
   let repo_path = config::resolve_repo_path(repo.as_deref());
   eprintln!("   Repository: {}", repo_path.display());
+  if grade_mode {
+    eprintln!("   Grade mode: progress is read-only.");
+  }
 
   // Print the config location and tool-resolution report FIRST, before the
   // heavier work (identity binding + exercise discovery), so it stays on screen
@@ -202,7 +211,7 @@ fn handle_default(repo: Option<PathBuf>) -> Result<()> {
 
   eprint!("   Loading exercises…");
   std::io::stderr().flush()?;
-  let mut application = app::App::new(repo_path)?;
+  let mut application = app::App::new(repo_path, grade_mode)?;
 
   let total = application.exercises.len();
   eprintln!(" found {total} exercise(s) across {} module(s).", application.tree.len());
