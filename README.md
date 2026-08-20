@@ -186,7 +186,7 @@ Depending on which languages your exercises use, install the corresponding toolc
 | **Go** | Install from [go.dev](https://go.dev/dl/) or via package manager |
 | **C++** | `g++` (Xcode CLT / `apt install g++`) and [Catch2](https://github.com/catchorg/Catch2) (`brew install catch2` / `apt install catch2`) |
 | **RISC-V** | GNU toolchain (`apt install gcc-riscv64-linux-gnu`) or [Ripes](https://github.com/mortbopet/Ripes) simulator |
-| **PlantUML** | A Java runtime (`java`) — the PlantUML engine is **bundled** into `lq` (or set `plantuml.bin` to a pre-existing install) |
+| **PlantUML** | Oracle Java JDK 21 (`java` on PATH) and the `PLANTUML_JAR` environment variable pointing to `plantuml.jar` (or set `plantuml.bin` in `lq.toml`) |
 | **Markdown** | No additional tools required - verification is regex-based |
 
 > **Quick setup:** Run `just setup` to install all toolchains automatically (macOS, Linux, and Windows supported).
@@ -265,8 +265,9 @@ The **`e`** shortcut opens the current exercise's source file in the editor
 configured under `[ide]` (and PlantUML previews open there too). `ide.bin`,
 `ripes.bin`, and `plantuml.bin` are auto-populated with a platform-appropriate
 default the first time `lq` runs — Zed or VS Code for the IDE, the discovered
-Ripes app for RISC-V, and the bundled engine for PlantUML — and can be edited to
-point elsewhere. When no IDE is found, `e` falls back to the OS default handler.
+Ripes app for RISC-V, and the `PLANTUML_JAR` environment variable for PlantUML
+— and can be edited to point elsewhere. When no IDE is found, `e` falls back to
+the OS default handler.
 
 **Persistence rules (progress):**
 - `best_score` only increases - lower scores never overwrite higher ones
@@ -592,7 +593,7 @@ def test_add_negative():
 @enduml
 ```
 
-On save the diagram is rendered to `main.png`. It is opened once in the configured `[ide]` (or the OS default image viewer if none is found); later saves re-render the file in place, which the editor auto-reloads, so no duplicate tabs are opened. Rendering uses the PlantUML engine **bundled** into `lq` (only a `java` runtime is needed); set `plantuml.bin` in `lq.toml` to use a pre-existing install instead. Scoring is order-insensitive and tolerant of minor differences, with a `0.8` pass threshold.
+On save the diagram is rendered to `main.png`. It is opened once in the configured `[ide]` (or the OS default image viewer if none is found); later saves re-render the file in place, which the editor auto-reloads, so no duplicate tabs are opened. Rendering requires Oracle Java JDK 21 on PATH and the `PLANTUML_JAR` environment variable pointing to `plantuml.jar`; set `plantuml.bin` in `lq.toml` to override the jar path. Scoring is order-insensitive and tolerant of minor differences, with a `0.8` pass threshold.
 
 #### Solution Folder
 

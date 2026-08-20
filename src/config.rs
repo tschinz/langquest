@@ -175,16 +175,16 @@ pub struct PlantumlConfig {
   /// Explicit path to a pre-existing PlantUML jar (or launcher script).
   ///
   /// When non-empty this is used as the `<plantuml>` substitution, letting a
-  /// course require a specific installed PlantUML. When empty, the PlantUML
-  /// engine bundled into `lq` is unpacked and used instead. Mirrors
+  /// course require a specific installed PlantUML. When empty, the
+  /// `PLANTUML_JAR` environment variable is used. Mirrors
   /// [`RipesConfig::bin`].
   #[serde(default)]
   pub bin: String,
   /// Command template used to render a `.puml` file to PNG on save.
   ///
   /// `<plantuml>` is substituted with [`bin`](Self::bin) when set, otherwise the
-  /// bundled jar path; `<file>` with the student's diagram source. Only the
-  /// `java` launcher needs to be on `PATH` when using the bundled jar.
+  /// `PLANTUML_JAR` environment variable; `<file>` with the student's diagram
+  /// source. The `java` launcher must be on `PATH` (Oracle Java JDK 21).
   pub cmd: String,
 }
 

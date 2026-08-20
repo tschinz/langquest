@@ -10,6 +10,14 @@ cmd = "go test -v ."
 [cpp]
 cmd = "g++ -std=c++20 <files> -o <out>"
 
+[plantuml]
+bin = ""
+cmd = "java -jar <plantuml> -tpng <file>"
+
+[ide]
+bin = 'C:\Users\remy.borgeat\AppData\Local\Programs\Zed\bin\zed'
+cmd = "<ide> <file>"
+
 [ripes]
 bin = "/Applications/Ripes.app/Contents/MacOS/Ripes"
 cmd = "ripes --mode cli -t asm --proc RV32_SS --json --isaexts M --cycles --regs --runinfo --timeout 5000 --src <file>"
