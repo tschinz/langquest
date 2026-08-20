@@ -1479,8 +1479,6 @@ fn verify_markdown(exercise: &Exercise) -> VerificationResult {
 // PlantUML runner
 // ---------------------------------------------------------------------------
 
-
-
 /// Verify a PlantUML exercise by fuzzy-comparing the student's diagram against
 /// the reference `solution/main.puml`.
 ///
