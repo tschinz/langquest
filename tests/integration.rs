@@ -586,11 +586,20 @@ mod runner {
     let (_tree, all_exercises, _) = lq::exercise::discover_exercises(&sample_repo());
     let ex = all_exercises.iter().find(|e| e.id == "sequence_login").expect("plantuml exercise present");
 
-    // The starter has no messages, so similarity to the reference is far below
-    // the pass threshold. Read-only — does not touch the fixture.
     let result = lq::runner::verify(ex, &lq::config::ProjectConfig::default(), &cancel_handle());
-    assert_eq!(result.total, 1);
-    assert!(result.score < result.threshold, "starter should not pass, got {}", result.score);
+    // When the PlantUML jar is unavailable, verification returns early with an
+    // error (total == 0) — same as Go/Python when the tool isn't on $PATH.
+    // When the jar IS available, the starter should score below the threshold.
+    if result.total == 0 {
+      assert!(
+        result.output.contains("plantuml") || result.output.contains("Java"),
+        "expected jar/Java error, got: {}",
+        result.output
+      );
+    } else {
+      assert_eq!(result.total, 1);
+      assert!(result.score < result.threshold, "starter should not pass, got {}", result.score);
+    }
   }
 
   #[test]
@@ -613,13 +622,21 @@ mod runner {
     let ex = exs.iter().find(|e| e.id == "sequence_login").expect("discovered in temp repo");
 
     let result = lq::runner::verify(ex, &lq::config::ProjectConfig::default(), &cancel_handle());
-    assert!(
-      (result.score - 1.0).abs() < f64::EPSILON,
-      "solution should score 1.0, got {} — {}",
-      result.score,
-      result.output
-    );
-    assert!(result.score >= result.threshold);
+    if result.total == 0 {
+      assert!(
+        result.output.contains("plantuml") || result.output.contains("Java"),
+        "expected jar/Java error, got: {}",
+        result.output
+      );
+    } else {
+      assert!(
+        (result.score - 1.0).abs() < f64::EPSILON,
+        "solution should score 1.0, got {} — {}",
+        result.score,
+        result.output
+      );
+      assert!(result.score >= result.threshold);
+    }
   }
 
   #[test]

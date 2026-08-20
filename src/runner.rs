@@ -195,7 +195,7 @@ pub fn verify(exercise: &Exercise, config: &ProjectConfig, cancel: &VerifyCancel
     Language::Python => verify_python(exercise, &config.python, cancel),
     Language::Go => verify_go(exercise, &config.go, cancel),
     Language::Cpp => verify_cpp(exercise, &config.cpp, cancel),
-    Language::Plantuml => verify_plantuml(exercise),
+    Language::Plantuml => verify_plantuml(exercise, config),
     Language::Text => verify_markdown(exercise),
   }
 }
@@ -1479,12 +1479,7 @@ fn verify_markdown(exercise: &Exercise) -> VerificationResult {
 // PlantUML runner
 // ---------------------------------------------------------------------------
 
-/// PlantUML jar embedded at build time (`assets/plantuml.jar`, MIT edition).
-///
-/// Used only as a fallback when [`PlantumlConfig::bin`] is empty, so a course
-/// can point at a pre-existing PlantUML install instead (mirrors Ripes, which
-/// discovers its binary rather than bundling one).
-const PLANTUML_JAR: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/plantuml.jar"));
+
 
 /// Verify a PlantUML exercise by fuzzy-comparing the student's diagram against
 /// the reference `solution/main.puml`.
@@ -1492,8 +1487,26 @@ const PLANTUML_JAR: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "
 /// The score is the [`plantuml_similarity`] of the two sources
 /// (order-insensitive, tolerant of minor differences). Rendering the PNG is a
 /// separate, save-time concern ([`render_plantuml_png`]), not part of scoring.
-fn verify_plantuml(exercise: &Exercise) -> VerificationResult {
+fn verify_plantuml(exercise: &Exercise, config: &ProjectConfig) -> VerificationResult {
   let threshold = exercise.language.threshold();
+
+  // Check that the PlantUML jar can be resolved — same validation as
+  // `render_plantuml_png` so the user sees the error on the Output page
+  // rather than a silent failure.
+  if let Err(e) = resolve_plantuml(&config.plantuml) {
+    return VerificationResult::zero(e, threshold);
+  }
+  match Command::new("java").arg("-version").output() {
+    Ok(o) if o.status.success() => {}
+    Ok(_) | Err(_) => {
+      return VerificationResult::zero(
+        "Java not found. Please install Oracle Java JDK 21 and ensure \
+         'java' is available on your PATH."
+          .to_string(),
+        threshold,
+      );
+    }
+  }
 
   let student = match fs::read_to_string(&exercise.source_path) {
     Ok(s) => s,
@@ -1529,20 +1542,28 @@ fn verify_plantuml(exercise: &Exercise) -> VerificationResult {
 }
 
 /// Resolve the `<plantuml>` command token: the configured
-/// [`PlantumlConfig::bin`] if set, otherwise the bundled jar unpacked to a
-/// stable cache path.
+/// [`PlantumlConfig::bin`] if set, otherwise the `PLANTUML_JAR` environment
+/// variable. Returns an error if neither is available.
 fn resolve_plantuml(cfg: &PlantumlConfig) -> Result<String, String> {
   if !cfg.bin.trim().is_empty() {
     return Ok(cfg.bin.clone());
   }
-  let dir = std::env::temp_dir().join("lq-plantuml");
-  fs::create_dir_all(&dir).map_err(|e| format!("failed to prepare PlantUML cache dir: {e}"))?;
-  let jar = dir.join("plantuml.jar");
-  let needs_write = fs::metadata(&jar).map(|m| m.len() != PLANTUML_JAR.len() as u64).unwrap_or(true);
-  if needs_write {
-    fs::write(&jar, PLANTUML_JAR).map_err(|e| format!("failed to unpack bundled PlantUML jar: {e}"))?;
+  match std::env::var("PLANTUML_JAR") {
+    Ok(path) if !path.trim().is_empty() => {
+      if !Path::new(&path).exists() {
+        return Err(format!(
+          "PLANTUML_JAR points to a non-existent file: {path}\n\
+           Please check the path or reinstall plantuml.jar."
+        ));
+      }
+      Ok(path)
+    }
+    _ => Err(
+      "PlantUML jar not found. Please install plantuml.jar and set the \
+       PLANTUML_JAR environment variable to point to it."
+        .to_string(),
+    ),
   }
-  Ok(jar.to_string_lossy().into_owned())
 }
 
 /// Render `puml_file` to a PNG next to it (on save), returning the PNG path.
@@ -1551,6 +1572,19 @@ fn resolve_plantuml(cfg: &PlantumlConfig) -> Result<String, String> {
 /// [`PlantumlConfig::cmd`].
 pub fn render_plantuml_png(cfg: &PlantumlConfig, puml_file: &Path) -> Result<PathBuf, String> {
   let plantuml = resolve_plantuml(cfg)?;
+
+  // Ensure `java` is available on PATH before attempting to run the command.
+  match Command::new("java").arg("-version").output() {
+    Ok(o) if o.status.success() => {}
+    Ok(_) | Err(_) => {
+      return Err(
+        "Java not found. Please install Oracle Java JDK 21 and ensure \
+         'java' is available on your PATH."
+          .to_string(),
+      );
+    }
+  }
+
   let file = puml_file.to_string_lossy();
   let tokens = expand_cmd(&cfg.cmd, &[("<plantuml>", &plantuml), ("<file>", &file)]);
 
@@ -1785,7 +1819,7 @@ impl ExerciseWatcher {
 mod tests {
   use super::*;
 
-  // -- PlantUML similarity + bundled jar -------------------------------
+  // -- PlantUML similarity + env var resolution ---------------------------
 
   #[test]
   fn plantuml_identical_diagrams_score_one() {
@@ -1829,10 +1863,14 @@ mod tests {
   }
 
   #[test]
-  fn plantuml_bundled_jar_resolves_when_bin_empty() {
+  fn plantuml_env_var_resolves_when_bin_empty() {
     let cfg = PlantumlConfig::default();
-    let resolved = resolve_plantuml(&cfg).expect("bundled jar resolves");
-    assert!(Path::new(&resolved).exists());
+    // If PLANTUML_JAR is set and points to a real file it should resolve.
+    // Otherwise resolve_plantuml should return an error (no bundled jar).
+    match resolve_plantuml(&cfg) {
+      Ok(resolved) => assert!(Path::new(&resolved).exists()),
+      Err(e) => assert!(e.contains("PLANTUML_JAR"), "unexpected error: {e}"),
+    }
   }
 
   #[test]
