@@ -11,11 +11,11 @@ cmd = "go test -v ."
 cmd = "g++ -std=c++20 <files> -o <out>"
 
 [plantuml]
-bin = ""
+bin = "$HOME/.local/bin/plantuml.jar"
 cmd = "java -jar <plantuml> -tpng <file>"
 
 [ide]
-bin = 'C:\Users\remy.borgeat\AppData\Local\Programs\Zed\bin\zed'
+bin = "/usr/local/bin/zed"
 cmd = "<ide> <file>"
 
 [ripes]
