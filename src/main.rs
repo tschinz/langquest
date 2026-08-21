@@ -193,8 +193,15 @@ fn handle_default(repo: Option<PathBuf>) -> Result<()> {
   let repo_path = config::resolve_repo_path(repo.as_deref());
   eprintln!("   Repository: {}", repo_path.display());
 
+  // Print the config location and tool-resolution report FIRST, before the
+  // heavier work (identity binding + exercise discovery), so it stays on screen
+  // long enough to read.
+  for line in toolchain_report_lines(&repo_path) {
+    eprintln!("   {line}");
+  }
+
   eprint!("   Loading exercises…");
-  std::io::stdout().flush()?;
+  std::io::stderr().flush()?;
   let mut application = app::App::new(repo_path)?;
 
   let total = application.exercises.len();
