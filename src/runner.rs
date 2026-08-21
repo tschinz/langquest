@@ -635,7 +635,7 @@ fn find_bundled_ripes(base: &Path) -> Option<PathBuf> {
 pub(crate) fn find_ripes_binary() -> Option<PathBuf> {
   // 1. Environment override
   if let Ok(p) = std::env::var("RIPES_PATH") {
-    let p = PathBuf::from(p);
+    let p = PathBuf::from(expand_path(&p));
     if p.exists() {
       return Some(p);
     }
@@ -695,7 +695,7 @@ fn build_ripes_command(ripes_cfg: &RipesConfig, source_file: &str) -> Result<(Pa
   // Resolve the binary.
   let binary = if !ripes_cfg.bin.is_empty() {
     // 1. Explicit path set in lq.toml - highest priority.
-    PathBuf::from(&ripes_cfg.bin)
+    PathBuf::from(expand_path(&ripes_cfg.bin))
   } else if program_token.contains(std::path::MAIN_SEPARATOR) || program_token.contains('/') {
     // 2. The cmd token already looks like a path.
     PathBuf::from(program_token)
@@ -1539,18 +1539,101 @@ fn verify_plantuml(exercise: &Exercise, config: &ProjectConfig) -> VerificationR
   }
 }
 
+/// Best-effort home directory: `$HOME` (macOS/Linux), else `%USERPROFILE%`
+/// (Windows).
+fn home_dir() -> Option<String> {
+  std::env::var("HOME")
+    .ok()
+    .filter(|s| !s.is_empty())
+    .or_else(|| std::env::var("USERPROFILE").ok().filter(|s| !s.is_empty()))
+}
+
+/// Expand a leading `~` and environment references in a config path string.
+///
+/// Cross-platform: handles a leading `~` (before `/` or `\`) via [`home_dir`],
+/// Unix-style `$VAR` / `${VAR}`, and Windows-style `%VAR%`. Config values are
+/// stored verbatim in `lq.toml` and are not otherwise shell-expanded.
+fn expand_path(input: &str) -> String {
+  // Leading `~` (followed by nothing or a path separator) → home dir.
+  let (mut out, rest) = match input.strip_prefix('~') {
+    Some(after) if after.is_empty() || after.starts_with('/') || after.starts_with('\\') => (home_dir().unwrap_or_default(), after),
+    _ => (String::new(), input),
+  };
+
+  let mut chars = rest.chars().peekable();
+  while let Some(c) = chars.next() {
+    match c {
+      // Unix-style $VAR / ${VAR}
+      '$' => {
+        let braced = chars.peek() == Some(&'{');
+        if braced {
+          chars.next();
+        }
+        let mut name = String::new();
+        while let Some(&nc) = chars.peek() {
+          if braced && nc == '}' {
+            chars.next();
+            break;
+          }
+          if !braced && !(nc.is_ascii_alphanumeric() || nc == '_') {
+            break;
+          }
+          name.push(nc);
+          chars.next();
+        }
+        if let Ok(val) = std::env::var(&name) {
+          out.push_str(&val);
+        }
+      }
+      // Windows-style %VAR%
+      '%' => {
+        let mut name = String::new();
+        let mut closed = false;
+        for nc in chars.by_ref() {
+          if nc == '%' {
+            closed = true;
+            break;
+          }
+          name.push(nc);
+        }
+        if closed {
+          if let Ok(val) = std::env::var(&name) {
+            out.push_str(&val);
+          }
+        } else {
+          // No closing `%`: emit the text verbatim.
+          out.push('%');
+          out.push_str(&name);
+        }
+      }
+      _ => out.push(c),
+    }
+  }
+  out
+}
+
 /// Resolve the `<plantuml>` command token: the configured
 /// [`PlantumlConfig::bin`] if set, otherwise the `PLANTUML_JAR` environment
-/// variable. Returns an error if neither is available.
+/// variable. `~` and `$VAR` are expanded, and the resolved path is verified to
+/// exist so a bad path surfaces as an error instead of a silent failure.
 fn resolve_plantuml(cfg: &PlantumlConfig) -> Result<String, String> {
   if !cfg.bin.trim().is_empty() {
-    return Ok(cfg.bin.clone());
+    let path = expand_path(cfg.bin.trim());
+    if !Path::new(&path).exists() {
+      return Err(format!(
+        "plantuml.bin in lq.toml points to a non-existent file:\n  {path}\n\
+         Fix the path (use an absolute path to plantuml.jar), or clear plantuml.bin \
+         to fall back to the PLANTUML_JAR environment variable."
+      ));
+    }
+    return Ok(path);
   }
   match std::env::var("PLANTUML_JAR") {
-    Ok(path) if !path.trim().is_empty() => {
+    Ok(raw) if !raw.trim().is_empty() => {
+      let path = expand_path(raw.trim());
       if !Path::new(&path).exists() {
         return Err(format!(
-          "PLANTUML_JAR points to a non-existent file: {path}\n\
+          "PLANTUML_JAR points to a non-existent file:\n  {path}\n\
            Please check the path or reinstall plantuml.jar."
         ));
       }
@@ -1675,7 +1758,7 @@ pub(crate) fn find_ide_binary() -> Option<PathBuf> {
 /// Resolve the IDE launcher: [`IdeConfig::bin`] if set, else auto-discovery.
 fn resolve_ide(cfg: &IdeConfig) -> Option<String> {
   if !cfg.bin.trim().is_empty() {
-    return Some(cfg.bin.clone());
+    return Some(expand_path(cfg.bin.trim()));
   }
   find_ide_binary().map(|p| p.to_string_lossy().into_owned())
 }
@@ -1695,6 +1778,92 @@ pub fn open_in_ide(cfg: &IdeConfig, file: &Path) -> bool {
     return false;
   };
   Command::new(program).args(args).spawn().is_ok()
+}
+
+// ---------------------------------------------------------------------------
+// Startup diagnostics
+// ---------------------------------------------------------------------------
+
+/// Resolution status of one configured tool, for the startup report.
+pub struct ToolStatus {
+  /// Short label (matches the `lq.toml` section, e.g. `rust`, `plantuml`).
+  pub label: &'static str,
+  /// Whether the tool / path was found.
+  pub found: bool,
+  /// Human-readable detail (the resolved path, or why it was not found).
+  pub detail: String,
+}
+
+/// Check every external tool / path configured in `lq.toml` and report whether
+/// each one resolves, for the startup diagnostics printed before the TUI opens.
+pub fn diagnose(cfg: &ProjectConfig) -> Vec<ToolStatus> {
+  fn status(label: &'static str, found: bool, detail: String) -> ToolStatus {
+    ToolStatus { label, found, detail }
+  }
+
+  // A configured command whose first token must resolve on `$PATH`.
+  fn program(label: &'static str, cmd: &str) -> ToolStatus {
+    let prog = cmd.split_whitespace().next().unwrap_or("");
+    match which(&[prog]) {
+      Some(p) => status(label, true, p.to_string_lossy().into_owned()),
+      None => status(label, false, format!("'{prog}' not found on PATH")),
+    }
+  }
+
+  let mut out = vec![
+    program("rust", &cfg.rust.cmd),
+    program("python", &cfg.python.cmd),
+    program("go", &cfg.go.cmd),
+    program("cpp", &cfg.cpp.cmd),
+  ];
+
+  // Ripes: explicit bin, then bundled/discovered, then `$PATH`.
+  out.push(if !cfg.ripes.bin.trim().is_empty() {
+    let p = expand_path(cfg.ripes.bin.trim());
+    if Path::new(&p).exists() {
+      status("ripes", true, p)
+    } else {
+      status("ripes", false, format!("ripes.bin not found: {p}"))
+    }
+  } else if let Some(p) = find_ripes_binary() {
+    status("ripes", true, p.to_string_lossy().into_owned())
+  } else if let Some(p) = which(&["ripes"]) {
+    status("ripes", true, p.to_string_lossy().into_owned())
+  } else {
+    status("ripes", false, "not found (set ripes.bin or RIPES_PATH)".to_string())
+  });
+
+  // Java (needed to render PlantUML).
+  let java_found = Command::new("java").arg("-version").output().map(|o| o.status.success()).unwrap_or(false);
+  out.push(status(
+    "java",
+    java_found,
+    which(&["java"])
+      .map(|p| p.to_string_lossy().into_owned())
+      .unwrap_or_else(|| "not found on PATH".to_string()),
+  ));
+
+  // PlantUML jar: plantuml.bin, then PLANTUML_JAR.
+  out.push(match resolve_plantuml(&cfg.plantuml) {
+    Ok(p) => status("plantuml", true, p),
+    Err(e) => status("plantuml", false, e.lines().next().unwrap_or("not found").to_string()),
+  });
+
+  // Editor / IDE (for the `e` shortcut and PlantUML preview).
+  out.push(match resolve_ide(&cfg.ide) {
+    Some(p) => {
+      let expanded = expand_path(&p);
+      let found = Path::new(&expanded).exists() || which(&[p.as_str()]).is_some();
+      if found {
+        status("ide", true, p)
+      } else {
+        status("ide", false, format!("ide.bin not found: {p}"))
+      }
+    }
+    None => status("ide", false, "none found (uses OS default for the 'e' shortcut)".to_string()),
+  });
+
+  out
 }
 
 /// Fuzzy similarity in `0.0..=1.0` between two PlantUML sources.
@@ -1872,12 +2041,44 @@ mod tests {
   }
 
   #[test]
-  fn plantuml_explicit_bin_takes_priority() {
+  fn plantuml_explicit_bin_is_used_when_it_exists() {
+    // bin takes priority over PLANTUML_JAR, but the file must exist.
+    let jar = std::env::temp_dir().join(format!("lq_test_plantuml_{}.jar", std::process::id()));
+    std::fs::write(&jar, b"jar").unwrap();
     let cfg = PlantumlConfig {
-      bin: "/opt/plantuml.jar".to_string(),
+      bin: jar.to_string_lossy().into_owned(),
       ..Default::default()
     };
-    assert_eq!(resolve_plantuml(&cfg).unwrap(), "/opt/plantuml.jar");
+    assert_eq!(resolve_plantuml(&cfg).unwrap(), jar.to_string_lossy());
+    let _ = std::fs::remove_file(&jar);
+  }
+
+  #[test]
+  fn plantuml_bin_missing_file_is_a_clear_error() {
+    let cfg = PlantumlConfig {
+      bin: "/definitely/not/here/plantuml.jar".to_string(),
+      ..Default::default()
+    };
+    let err = resolve_plantuml(&cfg).unwrap_err();
+    assert!(err.contains("non-existent file"), "unexpected error: {err}");
+  }
+
+  #[test]
+  fn expand_path_handles_tilde_and_env_vars() {
+    let home = std::env::var("HOME").unwrap_or_default();
+    if !home.is_empty() {
+      assert_eq!(expand_path("~/sub"), format!("{home}/sub"));
+      assert_eq!(expand_path("$HOME/sub"), format!("{home}/sub"));
+      assert_eq!(expand_path("${HOME}/sub"), format!("{home}/sub"));
+      // Windows-style %VAR% is expanded on every platform.
+      assert_eq!(expand_path("%HOME%/sub"), format!("{home}/sub"));
+    }
+    assert_eq!(expand_path("/no/expansion"), "/no/expansion");
+    assert_eq!(expand_path(r"C:\abs\path"), r"C:\abs\path");
+    // An unset variable expands to nothing, like a shell.
+    assert_eq!(expand_path("$LQ_UNSET_VAR_XYZ/tail"), "/tail");
+    // A lone `%` with no closing pair is kept verbatim.
+    assert_eq!(expand_path("50%done"), "50%done");
   }
 
   // -- IDE launching ---------------------------------------------------
