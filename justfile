@@ -121,6 +121,17 @@ check-deps:
     fi
 
     echo ""
+    echo "--- PlantUML (diagram exercises) ---"
+    if v=$(java -version 2>&1 | head -1); then ok "java" "$v"; else warn "java" "not found - needed for PlantUML exercises (just setup)"; fi
+    if [[ -n "${PLANTUML_JAR:-}" && -f "${PLANTUML_JAR}" ]]; then
+        ok "plantuml.jar" "PLANTUML_JAR=${PLANTUML_JAR}"
+    elif [[ -n "${PLANTUML_JAR:-}" ]]; then
+        warn "plantuml.jar" "PLANTUML_JAR set but file missing: ${PLANTUML_JAR}"
+    else
+        warn "plantuml.jar" "not found - set PLANTUML_JAR or plantuml.bin in lq.toml (just setup)"
+    fi
+
+    echo ""
     if [[ $errors -gt 0 ]]; then
         echo "✗ $errors error(s) found - fix the above before building or running exercises."
         exit 1
@@ -213,6 +224,31 @@ setup:
         echo "  Ripes is not available via Homebrew."
         echo "  Download from: https://github.com/mortbopet/Ripes/releases"
         echo "  Then set: export RIPES_PATH=/path/to/Ripes.app/Contents/MacOS/Ripes"
+    fi
+
+    # ── PlantUML (Java + plantuml.jar) ────────────────────────────────────────
+    # PlantUML exercises render diagrams with `java -jar <plantuml.jar>`.
+    echo ""
+    echo "--- PlantUML (diagram exercises) ---"
+    if ! command -v java >/dev/null 2>&1; then
+        echo "Installing Java (Temurin JDK)..."
+        brew install --cask temurin
+    else
+        echo "✓ java:    $(java -version 2>&1 | head -1)"
+    fi
+    if ! brew list plantuml >/dev/null 2>&1; then
+        echo "Installing PlantUML..."
+        brew install plantuml
+    else
+        echo "✓ plantuml: installed"
+    fi
+    PUML_JAR="$(brew --prefix plantuml 2>/dev/null)/libexec/plantuml.jar"
+    if [[ -f "$PUML_JAR" ]]; then
+        echo "✓ plantuml.jar: $PUML_JAR"
+        echo "  Point lq at it: export PLANTUML_JAR=\"$PUML_JAR\""
+        echo "  (or set plantuml.bin to that path in lq.toml)"
+    else
+        echo "  Could not locate plantuml.jar; set PLANTUML_JAR to your jar path."
     fi
 
     echo ""
@@ -333,6 +369,40 @@ setup:
         echo "  Then set: export RIPES_PATH=/path/to/Ripes.AppImage"
     fi
 
+    # ── PlantUML (Java + plantuml.jar) ────────────────────────────────────────
+    # PlantUML exercises render diagrams with `java -jar <plantuml.jar>`.
+    echo ""
+    echo "--- PlantUML (diagram exercises) ---"
+    if ! command -v java >/dev/null 2>&1; then
+        echo "Installing Java (JRE)..."
+        case "$PM" in
+            apt)    $INSTALL default-jre ;;
+            dnf)    $INSTALL java-latest-openjdk ;;
+            pacman) $INSTALL jre-openjdk ;;
+        esac
+    else
+        echo "✓ java:    $(java -version 2>&1 | head -1)"
+    fi
+    if ! command -v plantuml >/dev/null 2>&1 && [[ ! -f /usr/share/plantuml/plantuml.jar ]]; then
+        echo "Installing PlantUML..."
+        case "$PM" in
+            apt)    $INSTALL plantuml || true ;;
+            dnf)    $INSTALL plantuml || true ;;
+            pacman) $INSTALL plantuml || echo "  (plantuml is in the AUR on Arch - install via an AUR helper)" ;;
+        esac
+    fi
+    PUML_JAR=""
+    for j in /usr/share/plantuml/plantuml.jar /usr/share/java/plantuml.jar /usr/share/java/plantuml/plantuml.jar; do
+        [[ -f "$j" ]] && PUML_JAR="$j" && break
+    done
+    if [[ -n "$PUML_JAR" ]]; then
+        echo "✓ plantuml.jar: $PUML_JAR"
+        echo "  Point lq at it: export PLANTUML_JAR=\"$PUML_JAR\""
+        echo "  (or set plantuml.bin to that path in lq.toml)"
+    else
+        echo "  Could not locate plantuml.jar; set PLANTUML_JAR to your jar path."
+    fi
+
     echo ""
     echo "✓ Installation complete. Run 'just check-deps' to verify."
 
@@ -446,6 +516,27 @@ setup:
         Write-Host "  Download from: https://github.com/mortbopet/Ripes/releases"
         Write-Host '  Then set: $env:RIPES_PATH = "C:\path\to\Ripes.exe"'
     }
+
+    # ── PlantUML (Java + plantuml.jar) ────────────────────────────────────────
+    # PlantUML exercises render diagrams with `java -jar <plantuml.jar>`.
+    Write-Host ""
+    Write-Host "--- PlantUML (diagram exercises) ---"
+    if (-not (Get-Command java -ErrorAction SilentlyContinue)) {
+        Write-Host "Installing Java (Temurin JDK)..."
+        Pkg-Install "EclipseAdoptium.Temurin.21.JDK" "temurin"
+    } else {
+        Write-Host "✓ java:    $(java -version 2>&1 | Select-Object -First 1)"
+    }
+    Write-Host "Installing PlantUML..."
+    try {
+        if ($hasChoco)       { choco install plantuml -y }
+        elseif ($hasWinget)  { winget install --accept-source-agreements --accept-package-agreements -e --id PlantUML.PlantUML }
+    } catch {
+        Write-Host "  Could not install PlantUML automatically - install manually (e.g. 'choco install plantuml')."
+    }
+    Write-Host "  Then set PLANTUML_JAR to your plantuml.jar, e.g.:"
+    Write-Host '    $env:PLANTUML_JAR = "C:\ProgramData\chocolatey\lib\plantuml\tools\plantuml.jar"'
+    Write-Host "  (or set plantuml.bin to that path in lq.toml)"
 
     Write-Host ""
     Write-Host "✓ Setup complete. Run 'just check-deps' to verify."
