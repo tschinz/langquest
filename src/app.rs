@@ -262,7 +262,10 @@ impl App {
 
     app.setup_watcher();
     app.queue_verify();
-    app.maybe_render_plantuml();
+    // NB: do not render/open the PlantUML preview here. The app starts on the
+    // Overview, so rendering the persisted current exercise on launch would pop
+    // open a PNG the user never asked for. Rendering happens when the exercise
+    // is actually entered (`switch_exercise`) or saved.
     app.save_config();
 
     Ok(app)
