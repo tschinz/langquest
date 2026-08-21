@@ -28,6 +28,10 @@ struct Cli {
   #[arg(short = 'k', long)]
   keys: bool,
 
+  /// Print the toolchain report (lq.toml location + tool status), then exit
+  #[arg(short = 't', long)]
+  toolchain: bool,
+
   #[command(subcommand)]
   command: Option<Command>,
 }
@@ -46,6 +50,10 @@ fn main() -> Result<()> {
 
   if cli.keys {
     return handle_keys();
+  }
+
+  if cli.toolchain {
+    return handle_toolchain(cli.repo);
   }
 
   if cli.reset {
@@ -149,6 +157,35 @@ fn handle_status(repo: Option<PathBuf>) -> Result<()> {
 fn handle_stats(repo: Option<PathBuf>) -> Result<()> {
   let repo_path = config::resolve_repo_path(repo.as_deref());
   stats::run(&repo_path)
+}
+
+/// Build the toolchain report: the `lq.toml` location plus the resolution
+/// status of every tool configured in it. Shared by `--toolchain` and startup.
+fn toolchain_report_lines(repo_path: &std::path::Path) -> Vec<String> {
+  let cfg_path = config::config_path(repo_path);
+  let cfg = config::ProjectConfig::load_lenient(&cfg_path).unwrap_or_default();
+
+  let mut lines = vec![if cfg_path.exists() {
+    format!("Config: {} (found)", cfg_path.display())
+  } else {
+    format!("Config: {} (not found - using built-in defaults)", cfg_path.display())
+  }];
+  lines.push("Tools (from lq.toml):".to_string());
+  for tool in lq::runner::diagnose(&cfg) {
+    let mark = if tool.found { "✓" } else { "✗" };
+    lines.push(format!("  {mark} {:<9} {}", tool.label, tool.detail));
+  }
+  lines
+}
+
+/// Handle `-t` / `--toolchain`: print the toolchain report to stdout and exit,
+/// without launching the TUI.
+fn handle_toolchain(repo: Option<PathBuf>) -> Result<()> {
+  let repo_path = config::resolve_repo_path(repo.as_deref());
+  for line in toolchain_report_lines(&repo_path) {
+    println!("{line}");
+  }
+  Ok(())
 }
 
 /// Default handler (no subcommand, no `--reset`): launch the TUI.
