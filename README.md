@@ -45,7 +45,14 @@ A terminal-based, interactive programming exercise runner. Inspired by [Rustling
 
 ### Installing lq
 
-**Prerequisites:** Rust toolchain (edition 2024, Rust ≥ 1.85)
+**Prerequisites:**
+- Rust toolchain (edition 2024, Rust ≥ 1.87)
+- Build tools for your language exercises (see [Exercise Toolchains](#exercise-toolchains))
+  - `rustc` for rust exericses
+  - `go` for Go exercises
+  - `g++` and Catch2 for C/C++ exercises
+  - `python3` and `pytest` for Python exercises
+  - Oracle Java JDK 21 and plantuml.jar for PlantUML exercises
 
 ```sh
 # Clone and install
@@ -186,7 +193,7 @@ Depending on which languages your exercises use, install the corresponding toolc
 | **Go** | Install from [go.dev](https://go.dev/dl/) or via package manager |
 | **C++** | `g++` (Xcode CLT / `apt install g++`) and [Catch2](https://github.com/catchorg/Catch2) (`brew install catch2` / `apt install catch2`) |
 | **RISC-V** | GNU toolchain (`apt install gcc-riscv64-linux-gnu`) or [Ripes](https://github.com/mortbopet/Ripes) simulator |
-| **PlantUML** | Oracle Java JDK 21 (`java` on PATH) and the `PLANTUML_JAR` environment variable pointing to `plantuml.jar` (or set `plantuml.bin` in `lq.toml`) |
+| **PlantUML** | [Oracle Java JDK 21](https://www.oracle.com/java/technologies/downloads/) (`java` on PATH) and the `PLANTUML_JAR` environment variable pointing to `plantuml.jar` (or set `plantuml.bin` in `lq.toml`) |
 | **Markdown** | No additional tools required - verification is regex-based |
 
 > **Quick setup:** Run `just setup` to install all toolchains automatically (macOS, Linux, and Windows supported).
@@ -251,6 +258,10 @@ cmd = "rustc --edition 2024 --test <file> -o <out>"
 
 [python]
 cmd = "python3 -m pytest <file> --tb=short -q"
+
+[plantuml]
+bin = "~/.local/bin/lq/plantuml.jar"
+cmd = "java -jar <plantuml> -tpng <file>"
 
 [ripes]
 bin = "/Applications/Ripes.app/Contents/MacOS/Ripes"
@@ -594,6 +605,12 @@ def test_add_negative():
 ```
 
 On save the diagram is rendered to `main.png`. It is opened once in the configured `[ide]` (or the OS default image viewer if none is found); later saves re-render the file in place, which the editor auto-reloads, so no duplicate tabs are opened. Rendering requires Oracle Java JDK 21 on PATH and the `PLANTUML_JAR` environment variable pointing to `plantuml.jar`; set `plantuml.bin` in `lq.toml` to override the jar path. Scoring is order-insensitive and tolerant of minor differences, with a `0.8` pass threshold.
+
+Get the latest PlantUML jar from [https://plantuml.com/download](https://plantuml.com/download) and set the environment variable or the `plantuml.bin` path in `lq.toml`:
+
+```sh
+export PLANTUML_JAR=/path/to/plantuml.jar
+```
 
 #### Solution Folder
 
