@@ -198,7 +198,7 @@ impl App {
     // fallback) before exposing any progress. Records the bound owner.
     if !grade_mode {
       config.owner = crate::identity::authorize(&repo_path, config.owner.clone())
-        .map(|o| Some(o))
+        .map(Some)
         .map_err(|reason| anyhow::anyhow!("progress locked: {reason}"))?;
     }
 
