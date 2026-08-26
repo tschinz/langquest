@@ -356,8 +356,6 @@ impl App {
 
     });
     let _ = fs::write(rust_project_path, json.to_string());
-
-    println!("{}", sysroot_src_str);
   }
 
   /// Save config to disk, ignoring errors (best-effort).
