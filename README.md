@@ -46,7 +46,7 @@ A terminal-based, interactive programming exercise runner. Inspired by [Rustling
 ### Installing lq
 
 **Prerequisites:**
-- Rust toolchain (edition 2024, Rust ≥ 1.87)
+- Rust toolchain (edition 2024, Rust ≥ 1.85.1)
 - Build tools for your language exercises (see [Exercise Toolchains](#exercise-toolchains))
   - `rustc` for rust exericses
   - `go` for Go exercises
