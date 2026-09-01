@@ -280,7 +280,20 @@ Ripes app for RISC-V, and the `PLANTUML_JAR` environment variable for PlantUML
 — and can be edited to point elsewhere. When no IDE is found, `e` falls back to
 the OS default handler.
 
-**Persistence rules (progress):**
+### File watching
+
+`lq` uses file system events (e.g. inotify) to detect saves and automatically
+re-verify the exercises. Some environments like Docker containers on Windows
+do not send events to the langquest process.
+Set the `POLLING_MS` environment variableto to enable a polling watcher instead:
+
+```sh
+POLLING_MS=1000 lq {args}
+```
+
+Don't set it or set it to 0 to use the default, non-polling watcher instead.
+
+### Persistence rules (progress)
 - `best_score` only increases - lower scores never overwrite higher ones
 - `passed` becomes `true` when `score >= threshold` and never resets
 - `solution_seen` becomes `true` on first Solution page visit and never resets
