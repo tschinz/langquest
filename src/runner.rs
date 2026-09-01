@@ -204,25 +204,28 @@ pub fn verify(exercise: &Exercise, config: &ProjectConfig, cancel: &VerifyCancel
 // Rust runner
 // ---------------------------------------------------------------------------
 
-/// Parse the `[rust] cmd` template and return `(binary, args)`.
-///
-/// Substitutes `<file>` with the absolute source path and `<out>` with the
-/// path for the compiled test binary.
-fn build_rust_command(cfg: &RustConfig, src_path: &Path, out_path: &Path) -> Result<(PathBuf, Vec<String>), String> {
-  let tokens: Vec<&str> = cfg.cmd.split_whitespace().collect();
+/// Parse a `[rust]` command template and return `(binary, args)`.
+/// Optionally also takes a closure to transform the args
+fn parse_rust_cmd(label: &str, cmd: &str, sub: impl Fn(&str) -> String) -> Result<(PathBuf, Vec<String>), String> {
+  let tokens: Vec<&str> = cmd.split_whitespace().collect();
   if tokens.is_empty() {
-    return Err("rust.cmd is empty in lq.toml".to_string());
+    return Err(format!("rust.{label} is empty in lq.toml"));
   }
   let binary = PathBuf::from(tokens[0]);
-  let args: Vec<String> = tokens[1..]
-    .iter()
-    .map(|t| match *t {
-      "<file>" => src_path.to_string_lossy().to_string(),
-      "<out>" => out_path.to_string_lossy().to_string(),
-      other => other.to_string(),
-    })
-    .collect();
+  let args: Vec<String> = tokens[1..].iter().map(|t| sub(t)).collect();
   Ok((binary, args))
+}
+
+fn build_rust_cargo(cfg: &RustConfig) -> Result<(PathBuf, Vec<String>), String> {
+  parse_rust_cmd("cmd_cargo", &cfg.cmd_cargo, |t| t.to_string())
+}
+
+fn build_rust_command(cfg: &RustConfig, src_path: &Path, out_path: &Path) -> Result<(PathBuf, Vec<String>), String> {
+  parse_rust_cmd("cmd", &cfg.cmd, |t| match t {
+    "<file>" => src_path.to_string_lossy().to_string(),
+    "<out>" => out_path.to_string_lossy().to_string(),
+    other => other.to_string(),
+  })
 }
 
 /// Compile the student source as a Rust test binary and run it.
@@ -233,12 +236,19 @@ fn build_rust_command(cfg: &RustConfig, src_path: &Path, out_path: &Path) -> Res
 /// is visible in the output.
 fn verify_rust(exercise: &Exercise, rust_cfg: &RustConfig, cancel: &VerifyCancel) -> VerificationResult {
   let threshold = exercise.language.threshold();
-  let test_bin = exercise.dir.join(".lq_test");
+  let is_cargo = exercise.dir.join("Cargo.toml").is_file();
 
   // --- compile --------------------------------------------------------
-  let (compile_bin, compile_args) = match build_rust_command(rust_cfg, &exercise.source_path, &test_bin) {
-    Ok(b) => b,
-    Err(e) => return VerificationResult::zero(e, threshold),
+  let (compile_bin, compile_args) = if is_cargo {
+    match build_rust_cargo(rust_cfg) {
+      Ok(b) => b,
+      Err(e) => return VerificationResult::zero(e, threshold),
+    }
+  } else {
+    match build_rust_command(rust_cfg, &exercise.source_path, &exercise.dir.join(".lq_test")) {
+      Ok(b) => b,
+      Err(e) => return VerificationResult::zero(e, threshold),
+    }
   };
 
   let mut compile_cmd = Command::new(&compile_bin);
@@ -257,6 +267,18 @@ fn verify_rust(exercise: &Exercise, rust_cfg: &RustConfig, cancel: &VerifyCancel
     let out = combined_output(&compile);
     return VerificationResult::zero(cap_output(&out, MAX_OUTPUT_LINES), threshold);
   }
+
+  let test_bin = if is_cargo {
+    String::from_utf8_lossy(&compile.stdout)
+      .lines()
+      .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+      .filter_map(|j| j.get("executable").and_then(|e| e.as_str()).map(String::from))
+      .next_back()
+      .map(PathBuf::from)
+      .unwrap_or(exercise.dir.join(".lq_test"))
+  } else {
+    exercise.dir.join(".lq_test")
+  };
 
   // --- run tests (with --nocapture so println! inside tests is visible) in UI -
   // This output is not used for score parsing.
@@ -1812,6 +1834,7 @@ pub fn diagnose(cfg: &ProjectConfig) -> Vec<ToolStatus> {
 
   let mut out = vec![
     program("rust", &cfg.rust.cmd),
+    program("rust_cargo", &cfg.rust.cmd_cargo),
     program("python", &cfg.python.cmd),
     program("go", &cfg.go.cmd),
     program("cpp", &cfg.cpp.cmd),

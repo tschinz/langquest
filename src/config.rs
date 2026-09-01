@@ -101,12 +101,16 @@ pub struct RustConfig {
   /// `<file>` is substituted with the absolute path to the student's source
   /// file; `<out>` is substituted with the path to the compiled test binary.
   pub cmd: String,
+
+  /// Command used to build the cargo project
+  pub cmd_cargo: String,
 }
 
 impl Default for RustConfig {
   fn default() -> Self {
     Self {
       cmd: "rustc --edition 2024 --test <file> -o <out>".to_string(),
+      cmd_cargo: "cargo test --no-fail-fast --no-run --message-format=json".to_string(),
     }
   }
 }

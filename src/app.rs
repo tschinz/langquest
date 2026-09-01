@@ -323,9 +323,14 @@ impl App {
   /// Create the .rust-project.json file.
   /// if this fails, we don't really care because it's not important right now plus there's very
   /// little that can actually, realistically fail.
+  /// Excercises with a cargo.toml are skipped.
   fn maybe_create_rust_project_json(&self) {
     let exercise = self.current_exercise();
     if exercise.language != Language::Rust {
+      return;
+    }
+
+    if exercise.dir.join("Cargo.toml").is_file() {
       return;
     }
 
