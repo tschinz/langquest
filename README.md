@@ -679,10 +679,12 @@ Commands:
   help            Print this message or the help of the given subcommand(s)
 
 Options:
-      --repo <REPO>  Path to exercise repository root
+  -r  --repo <REPO>  Path to exercise repository root
       --reset        Wipe all progress in lq.toml and start fresh
   -s, --stats        Display detailed statistics about exercise progress
   -k, --keys         Print version and hashes of embedded crypto keys
+  -t, --toolchain    Print the toolchain report (lq.toml location + tool status), then exit
+      --grade        Grade student; Read-only progress file
   -h, --help         Print help
   -V, --version      Print version
 ```
@@ -710,6 +712,14 @@ lq --reset
 lq seal-solutions --repo /path/to/repo
 ```
 
+After student is done:
+
+```sh
+# Check student solutions without writting anything to the progress file or any
+# Github identity check
+lq --grade --repo /path/to/exercises
+```
+
 ## Dependencies
 
 | Crate | Purpose |
@@ -721,14 +731,19 @@ lq seal-solutions --repo /path/to/repo
 | `syntect` | Syntax highlighting on the Solution page |
 | `pulldown-cmark` | Markdown rendering |
 | `toml` + `serde` | Configuration and frontmatter parsing |
+| `serde_json` | JSON serialization |
 | `regex` | Keyword matching for Markdown exercises |
 | `anyhow` | Error propagation |
 | `thiserror` | Typed domain errors |
+| `chacha20poly1305` | Encryption for progress and sealed solutions |
+| `sha2` | SHA-256 hashing for key derivation and integrity checks |
 
 ### Build dependencies
 | Crate | Purpose |
 |-------|---------|
 | `dotenvy` | Load `.env` file for secret keys |
+| `sha2` | Hash embedded secret keys |
+| `hex` | Hex-encode key fingerprints |
 
 ### Test dependencies
 | Project name | Purpose |
