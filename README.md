@@ -21,6 +21,7 @@ A terminal-based, interactive programming exercise runner. Inspired by [Rustling
 - [Getting Started](#getting-started)
   - [Creating Your Exercise Repository](#creating-your-exercise-repository)
   - [Launching lq](#launching-lq)
+  - [Keybinds](#keybinds)
   - [Configuration & progress files](#configuration--progress-files)
   - [Progress, identity & syncing](#progress-identity--syncing)
   - [Teacher vs student repos (encrypted solutions)](#teacher-vs-student-repos-encrypted-solutions)
@@ -238,6 +239,42 @@ lq --repo /path/to/my-exercises
 cd /path/to/my-exercises
 lq
 ```
+
+### Keybinds
+
+#### Global
+
+| Key         | Action                                 |
+|-------------|----------------------------------------|
+| `a`         | Open about page                        |
+| `m`         | Toggle menubar                         |
+| `q`         | Quit LangQuest                         |
+
+#### Overview
+
+| Key         | Action                                 |
+|-------------|----------------------------------------|
+| `↑` / `↓`   | Navigate the exercise list             |
+| `Enter`     | Open the selected exercise             |
+| `z`         | Collapse / expand all exercise folders |
+
+#### Exercise
+
+| Key         | Action                                                       |
+|-------------|--------------------------------------------------------------|
+| `←` / `→`   | Jump between pages (Theory, Task, Debug, Output, Solution)   |
+| `↑` / `↓`   | Scroll text within the current page                          |
+| `j` / `k`   | Jump to the previous / next exercise                         |
+| `e`         | Open the current exercise file in your editor                |
+| `E`         | Open the current exercise directory in your editor           |
+| `h`         | Reveal the next hint                                         |
+| `o`         | Go back to the Overview page                                 |
+
+- Arrow keys: scroll up/down, switch tabs
+- `j`/`k`: switch to previous / next excercise
+- `e`: open excercise file in editor
+- `E`: open excercise directory in editor
+
 
 ### Configuration & progress files
 
