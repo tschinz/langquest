@@ -269,13 +269,19 @@ fn verify_rust(exercise: &Exercise, rust_cfg: &RustConfig, cancel: &VerifyCancel
   }
 
   let test_bin = if is_cargo {
-    String::from_utf8_lossy(&compile.stdout)
+    let Some(test_bin) = String::from_utf8_lossy(&compile.stdout)
       .lines()
       .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
       .filter_map(|j| j.get("executable").and_then(|e| e.as_str()).map(String::from))
       .next_back()
       .map(PathBuf::from)
-      .unwrap_or(exercise.dir.join(".lq_test"))
+    else {
+      return VerificationResult::zero(
+        "no test executable was found in target/ (make sure rust.cmd_cargo uses --message-format=json)".to_string(),
+        threshold,
+      );
+    };
+    test_bin
   } else {
     exercise.dir.join(".lq_test")
   };
@@ -305,8 +311,11 @@ fn verify_rust(exercise: &Exercise, rust_cfg: &RustConfig, cancel: &VerifyCancel
   run_cmd.current_dir(&exercise.dir);
   let run = run_command_cancellable(&mut run_cmd, cancel);
 
-  // best-effort cleanup regardless of run outcome
-  let _ = fs::remove_file(&test_bin);
+  // best-effort cleanup regardless of run outcome (skipped for cargo so its
+  // target/ build cache stays valid)
+  if !is_cargo {
+    let _ = fs::remove_file(&test_bin);
+  }
 
   let run = match run {
     Ok(o) => o,
