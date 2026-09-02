@@ -26,7 +26,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
-use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{Config, EventKind, PollWatcher, RecommendedWatcher, RecursiveMode, Watcher};
 use regex::RegexBuilder;
 
 use crate::config::{CppConfig, GoConfig, IdeConfig, PlantumlConfig, ProjectConfig, PythonConfig, RipesConfig, RustConfig};
@@ -1930,7 +1930,7 @@ fn levenshtein(a: &[char], b: &[char]) -> usize {
 pub struct ExerciseWatcher {
   /// Held to keep the underlying OS watcher alive.  Dropped when the
   /// struct is dropped, which stops watching.
-  _watcher: RecommendedWatcher,
+  _watcher: Box<dyn Watcher + Send>,
   /// Receives `()` each time the watched file is created or modified.
   pub event_rx: mpsc::Receiver<()>,
 }
@@ -1955,19 +1955,29 @@ impl ExerciseWatcher {
       .parent()
       .ok_or_else(|| anyhow::anyhow!("source file {:?} does not have a parent dir", source_path))?;
 
-    let mut watcher = RecommendedWatcher::new(
-      move |res: Result<notify::Event, notify::Error>| {
-        if let Ok(event) = res
-          && matches!(event.kind, EventKind::Create(_) | EventKind::Modify(_))
-          && event.paths.iter().any(|p| p.file_name() == Some(&file_name))
-        {
-          // Ignore send errors - the receiver may have been
-          // dropped if the app is shutting down.
-          let _ = tx.send(());
+    let callback = move |res: Result<notify::Event, notify::Error>| {
+      if let Ok(event) = res
+        && matches!(event.kind, EventKind::Create(_) | EventKind::Modify(_))
+        && event.paths.iter().any(|p| p.file_name() == Some(&file_name))
+      {
+        // Ignore send errors - the receiver may have been
+        // dropped if the app is shutting down.
+        let _ = tx.send(());
+      }
+    };
+
+    let mut watcher: Box<dyn Watcher + Send> = match std::env::var("POLLING_MS").ok() {
+      Some(ms) => {
+        let ms: u64 = ms.parse().map_err(|e| anyhow::anyhow!("POLLING_MS must be an integer: {}", e))?;
+        if ms > 0 {
+          let config = Config::default().with_poll_interval(Duration::from_millis(ms));
+          Box::new(PollWatcher::new(callback, config)?)
+        } else {
+          Box::new(RecommendedWatcher::new(callback, Config::default())?)
         }
-      },
-      Config::default(),
-    )?;
+      }
+      None => Box::new(RecommendedWatcher::new(callback, Config::default())?),
+    };
 
     watcher.watch(parent, RecursiveMode::NonRecursive)?;
 

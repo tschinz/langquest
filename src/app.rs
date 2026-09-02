@@ -685,7 +685,13 @@ impl App {
         false
       }
       KeyCode::Char('e') => {
-        self.open_in_editor();
+        let open_parent_dir = false;
+        self.open_in_editor(open_parent_dir);
+        false
+      }
+      KeyCode::Char('E') => {
+        let open_parent_dir = true;
+        self.open_in_editor(open_parent_dir);
         false
       }
       KeyCode::Char('a') => {
@@ -1045,16 +1051,21 @@ impl App {
   ///    would conflict with the running TUI.
   /// 3. OS default text handler:
   ///    - macOS  : `open -t <file>` - always opens as text, even for unknown
-  ///      extensions like `.asm` where plain `open` would fail.
+  ///      extensions like `.asm` where plain `open` would fail
   ///    - Linux  : `xdg-open <file>`
   ///    - Windows: `explorer <file>` - guaranteed to open any file as text.
   ///
   /// The process is spawned and forgotten - the TUI keeps running.
-  fn open_in_editor(&self) {
+  fn open_in_editor(&self, open_parent_dir: bool) {
     if self.view != View::ExerciseView {
       return;
     }
-    let path = self.current_exercise().source_path.clone();
+
+    let path = if open_parent_dir {
+      self.current_exercise().source_path.parent().unwrap().to_path_buf()
+    } else {
+      self.current_exercise().source_path.to_path_buf()
+    };
 
     // Prefer the configured IDE, then $VISUAL, then the OS default handler.
     if runner::open_in_ide(&self.config.ide, &path) {

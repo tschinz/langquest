@@ -21,6 +21,7 @@ A terminal-based, interactive programming exercise runner. Inspired by [Rustling
 - [Getting Started](#getting-started)
   - [Creating Your Exercise Repository](#creating-your-exercise-repository)
   - [Launching lq](#launching-lq)
+  - [Keybinds](#keybinds)
   - [Configuration & progress files](#configuration--progress-files)
   - [Progress, identity & syncing](#progress-identity--syncing)
   - [Teacher vs student repos (encrypted solutions)](#teacher-vs-student-repos-encrypted-solutions)
@@ -46,7 +47,7 @@ A terminal-based, interactive programming exercise runner. Inspired by [Rustling
 ### Installing lq
 
 **Prerequisites:**
-- Rust toolchain (edition 2024, Rust ≥ 1.87)
+- Rust toolchain (edition 2024, Rust ≥ 1.88)
 - Build tools for your language exercises (see [Exercise Toolchains](#exercise-toolchains))
   - `rustc` for rust exericses
   - `go` for Go exercises
@@ -239,6 +240,42 @@ cd /path/to/my-exercises
 lq
 ```
 
+### Keybinds
+
+#### Global
+
+| Key         | Action                                 |
+|-------------|----------------------------------------|
+| `a`         | Open about page                        |
+| `m`         | Toggle menubar                         |
+| `q`         | Quit LangQuest                         |
+
+#### Overview
+
+| Key         | Action                                 |
+|-------------|----------------------------------------|
+| `↑` / `↓`   | Navigate the exercise list             |
+| `Enter`     | Open the selected exercise             |
+| `z`         | Collapse / expand all exercise folders |
+
+#### Exercise
+
+| Key         | Action                                                       |
+|-------------|--------------------------------------------------------------|
+| `←` / `→`   | Jump between pages (Theory, Task, Debug, Output, Solution)   |
+| `↑` / `↓`   | Scroll text within the current page                          |
+| `j` / `k`   | Jump to the previous / next exercise                         |
+| `e`         | Open the current exercise file in your editor                |
+| `E`         | Open the current exercise directory in your editor           |
+| `h`         | Reveal the next hint                                         |
+| `o`         | Go back to the Overview page                                 |
+
+- Arrow keys: scroll up/down, switch tabs
+- `j`/`k`: switch to previous / next excercise
+- `e`: open excercise file in editor
+- `E`: open excercise directory in editor
+
+
 ### Configuration & progress files
 
 `lq` manages three files at the root of your exercise repository, split by purpose:
@@ -280,7 +317,20 @@ Ripes app for RISC-V, and the `PLANTUML_JAR` environment variable for PlantUML
 — and can be edited to point elsewhere. When no IDE is found, `e` falls back to
 the OS default handler.
 
-**Persistence rules (progress):**
+### File watching
+
+`lq` uses file system events (e.g. inotify) to detect saves and automatically
+re-verify the exercises. Some environments like Docker containers on Windows
+do not send events to the langquest process.
+Set the `POLLING_MS` environment variableto to enable a polling watcher instead:
+
+```sh
+POLLING_MS=1000 lq {args}
+```
+
+Don't set it or set it to 0 to use the default, non-polling watcher instead.
+
+### Persistence rules (progress)
 - `best_score` only increases - lower scores never overwrite higher ones
 - `passed` becomes `true` when `score >= threshold` and never resets
 - `solution_seen` becomes `true` on first Solution page visit and never resets
@@ -679,11 +729,13 @@ Commands:
   help            Print this message or the help of the given subcommand(s)
 
 Options:
-      --repo <REPO>  Path to exercise repository root
+  -r  --repo <REPO>  Path to exercise repository root
       --reset        Wipe all progress in lq.toml and start fresh
       --grade        Grade mode: read-only progress file, skip identity validation
   -s, --stats        Display detailed statistics about exercise progress
   -k, --keys         Print version and hashes of embedded crypto keys
+  -t, --toolchain    Print the toolchain report (lq.toml location + tool status), then exit
+      --grade        Grade student; Read-only progress file
   -h, --help         Print help
   -V, --version      Print version
 ```
@@ -731,14 +783,19 @@ the results as TOML.
 | `syntect` | Syntax highlighting on the Solution page |
 | `pulldown-cmark` | Markdown rendering |
 | `toml` + `serde` | Configuration and frontmatter parsing |
+| `serde_json` | JSON serialization |
 | `regex` | Keyword matching for Markdown exercises |
 | `anyhow` | Error propagation |
 | `thiserror` | Typed domain errors |
+| `chacha20poly1305` | Encryption for progress and sealed solutions |
+| `sha2` | SHA-256 hashing for key derivation and integrity checks |
 
 ### Build dependencies
 | Crate | Purpose |
 |-------|---------|
 | `dotenvy` | Load `.env` file for secret keys |
+| `sha2` | Hash embedded secret keys |
+| `hex` | Hex-encode key fingerprints |
 
 ### Test dependencies
 | Project name | Purpose |
