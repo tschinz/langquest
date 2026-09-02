@@ -82,7 +82,7 @@ mod discovery {
     // 01-rust now has 1 direct exercise + 1 subgroup with 3 nested exercises
     assert!(basics.children.len() >= 2, "expected at least 2 children under 01-rust");
     let ex_count = count_exercises(&basics.children);
-    assert_eq!(ex_count, 4, "expected 4 total exercises under 01-rust");
+    assert_eq!(ex_count, 5, "expected 5 total exercises under 01-rust");
   }
 
   #[test]
