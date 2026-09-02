@@ -292,6 +292,7 @@ customise:
 ```toml
 [rust]
 cmd = "rustc --edition 2024 --test <file> -o <out>"
+cmd_cargo = "cargo test --no-fail-fast --no-run --message-format=json"
 
 [python]
 cmd = "python3 -m pytest <file> --tb=short -q"
@@ -507,6 +508,7 @@ Each exercise lives in its own directory within a module:
     ├── 01-theory.md           ← optional background reading
     ├── 02-task.md             ← required task description with frontmatter
     ├── main.<ext>             ← student source file (rs, go, cpp, py, md, asm, puml)
+    ├── opt: Cargo.toml        ← *optional* rust cargo project file
     └── solution/
         ├── main.<ext>         ← reference solution
         └── solution.md        ← hints and explanation
@@ -573,6 +575,22 @@ mod tests {
         assert_eq!(add(-1, 1), 0);
     }
 }
+```
+
+**Optional Rust Cargo project** file (`Cargo.toml`):
+
+```toml
+[package]
+name = "exercise"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+sha2 = "0.11.0"
+
+[[bin]]
+name = "exercise"
+path = "main.rs"
 ```
 
 **Go** (`main.go` + `main_test.go`) - Uses `testing.T` functions:
