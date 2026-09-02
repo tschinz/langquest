@@ -1,5 +1,6 @@
 [rust]
 cmd = "rustc --edition 2024 --test <file> -o <out>"
+cmd_cargo = "cargo test --no-fail-fast --no-run --message-format=json"
 
 [python]
 cmd = "python3 -m pytest <file> --tb=short -q"
