@@ -407,6 +407,11 @@ impl ProjectConfig {
   /// Maps serialization errors to [`ConfigError::Serialize`] and I/O errors to
   /// [`ConfigError::Write`].
   pub fn save(&self, path: &Path) -> Result<(), ConfigError> {
+    // Grade mode is ro, just return
+    if self.grade_mode {
+      return Ok(());
+    }
+
     // Plaintext commands -> lq.toml
     let commands = CommandsFile {
       rust: self.rust.clone(),
@@ -422,11 +427,6 @@ impl ProjectConfig {
       path: path.to_path_buf(),
       source: e,
     })?;
-
-    // Grade mode is read-only: never rewrite the encrypted progress file.
-    if self.grade_mode {
-      return Ok(());
-    }
 
     // Encrypted progress -> .lq.progress
     let progress = ProgressFile {
@@ -652,13 +652,16 @@ mod tests {
     let dir = std::env::temp_dir().join("lq_test_grade_save");
     let _ = fs::create_dir_all(&dir);
     let path = dir.join("lq.toml");
+    fs::write(&path, "# original\n").unwrap();
 
     let mut cfg = ProjectConfig::default();
     cfg.update_score("01-basics/01-hello", 1.0, 0.7);
     cfg.grade_mode = true;
     cfg.save(&path).unwrap();
 
-    // The encrypted progress file should not be modified (or created in this case).
+    // Neither the plaintext lq.toml nor the encrypted progress file should be modified
+    // (or created in this case).
+    assert_eq!(fs::read_to_string(&path).unwrap(), "# original\n");
     assert!(!progress_path(&path).exists());
 
     let _ = fs::remove_dir_all(&dir);
