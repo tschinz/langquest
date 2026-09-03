@@ -396,7 +396,7 @@ pub fn rust_run_main(exercise: &Exercise, rust_cfg: &RustConfig, cancel: &Verify
   };
 
   let _ = fs::remove_file(&run_bin);
-  output
+  cap_output(&output, MAX_OUTPUT_LINES)
 }
 
 // ---------------------------------------------------------------------------
