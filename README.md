@@ -731,11 +731,9 @@ Commands:
 Options:
   -r  --repo <REPO>  Path to exercise repository root
       --reset        Wipe all progress in lq.toml and start fresh
-      --grade        Grade mode: read-only progress file, skip identity validation
   -s, --stats        Display detailed statistics about exercise progress
   -k, --keys         Print version and hashes of embedded crypto keys
   -t, --toolchain    Print the toolchain report (lq.toml location + tool status), then exit
-      --grade        Grade student; Read-only progress file
   -h, --help         Print help
   -V, --version      Print version
 ```
@@ -767,8 +765,11 @@ lq seal-solutions --repo /path/to/repo
 
 `lq --grade` launches the TUI in **read-only** mode for grading a student's
 repository without having to sign in as the student.
+The flag is locked behind the `grading` cargo feature
+(`cargo build --release --features grading`).
+By default, student binaries without the `--grade` flag are built.
 
-Note: If one owuld like to script the grading process, use the 
+Note: If one would like to script the grading process, use the 
 [`lq -s --repo`](#configuration--progress-files) command, as it exports
 the results as TOML.
 

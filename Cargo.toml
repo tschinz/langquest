@@ -28,6 +28,9 @@ path = "src/lib.rs"
 name = "lq"
 path = "src/main.rs"
 
+[features]
+grading = [] # Enables --grade flag
+
 [dependencies]
 ratatui = { version = "0.30", features = ["crossterm"] }
 crossterm = "0.29"

@@ -33,6 +33,7 @@ struct Cli {
   toolchain: bool,
 
   /// Grade student; Read-only progress file
+  #[cfg(feature = "grading")]
   #[arg(long)]
   grade: bool,
 
@@ -71,7 +72,10 @@ fn main() -> Result<()> {
   match cli.command {
     Some(Command::Status) => handle_status(cli.repo),
     Some(Command::SealSolutions) => handle_seal_solutions(cli.repo),
+    #[cfg(feature = "grading")]
     None => handle_default(cli.repo, cli.grade),
+    #[cfg(not(feature = "grading"))]
+    None => handle_default(cli.repo, false),
   }
 }
 
