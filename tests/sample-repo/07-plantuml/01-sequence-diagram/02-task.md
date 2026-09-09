@@ -19,7 +19,4 @@ diagram**:
 
 ## How it is graded
 
-Every time you save, the diagram is rendered to `main.png` (opened automatically
-the first time). Your diagram is scored by **fuzzy similarity** to the reference
-solution — the participants and messages must match, but ordering and minor
-formatting differences are tolerated.
+Every time you save, the diagram is rendered to `main.png` (opened automatically the first time). Your diagram is scored by **keywords**: each entry in the solution's `keywords` list is matched against your diagram as a case-insensitive regular expression. Keywords which are not valid regex are matched via substring search. Reach the pass threshold to complete the exercise.

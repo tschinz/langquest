@@ -6,7 +6,16 @@ hints    = [
     "Message text goes after the colon, e.g. `Browser -> Server: POST /login`.",
     "Order: login → POST /login → 200 OK → welcome.",
 ]
-keywords = []
+keywords = [
+    "User",
+    "Browser",
+    "Server",
+    "[^-]->",
+    "-->",
+    "POST /login",
+    "200 OK",
+    "welcome",
+]
 ---
 
 ## Explanation
@@ -27,5 +36,4 @@ Browser --> User: welcome
 - Participants are implicit — first use of a name creates it.
 - `->` synchronous message, `-->` reply/return.
 - The label after `:` is free text.
-- Grading is by fuzzy similarity, so exact spacing/order need not match, but the
-  participants and messages should.
+- Grading is by keyword matching.

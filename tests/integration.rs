@@ -587,19 +587,9 @@ mod runner {
     let ex = all_exercises.iter().find(|e| e.id == "sequence_login").expect("plantuml exercise present");
 
     let result = lq::runner::verify(ex, &lq::config::ProjectConfig::default(), &cancel_handle());
-    // When the PlantUML jar is unavailable, verification returns early with an
-    // error (total == 0) — same as Go/Python when the tool isn't on $PATH.
-    // When the jar IS available, the starter should score below the threshold.
-    if result.total == 0 {
-      assert!(
-        result.output.contains("plantuml") || result.output.contains("Java"),
-        "expected jar/Java error, got: {}",
-        result.output
-      );
-    } else {
-      assert_eq!(result.total, 1);
-      assert!(result.score < result.threshold, "starter should not pass, got {}", result.score);
-    }
+    // Keyword-based grading needs no PlantUML jar
+    assert!(result.total > 0, "expected keyword checks, got: {}", result.output);
+    assert!(result.score < result.threshold, "starter should not pass, got {}", result.score);
   }
 
   #[test]
@@ -622,21 +612,15 @@ mod runner {
     let ex = exs.iter().find(|e| e.id == "sequence_login").expect("discovered in temp repo");
 
     let result = lq::runner::verify(ex, &lq::config::ProjectConfig::default(), &cancel_handle());
-    if result.total == 0 {
-      assert!(
-        result.output.contains("plantuml") || result.output.contains("Java"),
-        "expected jar/Java error, got: {}",
-        result.output
-      );
-    } else {
-      assert!(
-        (result.score - 1.0).abs() < f64::EPSILON,
-        "solution should score 1.0, got {} — {}",
-        result.score,
-        result.output
-      );
-      assert!(result.score >= result.threshold);
-    }
+    // Keyword-based grading needs no PlantUML jar
+    assert!(result.total > 0, "expected keyword checks, got: {}", result.output);
+    assert!(
+      (result.score - 1.0).abs() < f64::EPSILON,
+      "solution should score 1.0, got {} — {}",
+      result.score,
+      result.output
+    );
+    assert!(result.score >= result.threshold);
   }
 
   #[test]
@@ -654,27 +638,6 @@ mod runner {
       // We just verify the runner doesn't panic and returns a result.
       assert!(result.threshold > 0.0);
       assert!(result.threshold <= 1.0);
-    }
-  }
-
-  #[test]
-  fn verify_markdown_exercise_from_sample_repo() {
-    let (_tree, all_exercises, _) = lq::exercise::discover_exercises(&sample_repo());
-    // No markdown/text exercise exists in the trimmed sample repo;
-    // the test is a no-op but must still compile and pass.
-    let concept = all_exercises.iter().find(|e| e.language == lq::exercise::Language::Text);
-
-    if let Some(exercise) = concept {
-      assert_eq!(exercise.language, lq::exercise::Language::Text);
-      let result = lq::runner::verify(
-        exercise,
-        &lq::config::ProjectConfig::default(),
-        &lq::runner::VerifyCancel::new(std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)), 0),
-      );
-      // The starter has empty answer placeholders, so score should be low.
-      assert!(result.threshold > 0.0);
-      // Markdown exercises have keyword-based scoring.
-      assert!(result.total > 0 || result.score == 0.0);
     }
   }
 

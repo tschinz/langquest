@@ -226,8 +226,8 @@ pub fn verify(exercise: &Exercise, config: &ProjectConfig, cancel: &VerifyCancel
     Language::Python => verify_python(exercise, &config.python, cancel),
     Language::Go => verify_go(exercise, &config.go, cancel),
     Language::Cpp => verify_cpp(exercise, &config.cpp, cancel),
-    Language::Plantuml => verify_plantuml(exercise, config),
-    Language::Text => verify_markdown(exercise),
+    Language::Plantuml => verify_plantuml(exercise),
+    Language::Text => verify_text(exercise, true, None),
   }
 }
 
@@ -1463,15 +1463,23 @@ fn parse_unittest_output(output: &str, threshold: f64) -> VerificationResult {
 }
 
 // ---------------------------------------------------------------------------
-// Markdown / text runner
+// Text / keyword runner (Markdown, PlantUML, ...)
 // ---------------------------------------------------------------------------
 
-/// Check the student's markdown against keyword patterns from the solution
-/// data, using case-insensitive regex matching.
+/// Check the student's submission against the keywords from the solution data.
 ///
-/// Score is `matched / total_keywords`.  Unmatched keywords are listed in
-/// the output as gap indicators.
-fn verify_markdown(exercise: &Exercise) -> VerificationResult {
+/// Keywords are matched as case-insensitive regular expressions. A keyword
+/// that is not a valid pattern falls back to a plain case-insensitive
+/// substring search.
+///
+/// `use_marker` restricts matching to the content after the answer-marker
+/// line.
+///
+/// `strip` is an optional regex pattern whose matches are removed from the
+/// submission before matching.
+///
+/// Score is `matched / total_keywords`.
+fn verify_text(exercise: &Exercise, use_marker: bool, strip: Option<&str>) -> VerificationResult {
   let threshold = exercise.language.threshold();
 
   let solution_data = match &exercise.solution_data {
@@ -1493,13 +1501,29 @@ fn verify_markdown(exercise: &Exercise) -> VerificationResult {
     }
   };
 
+  let stripped;
+  let full_content = match strip {
+    Some(pattern) => {
+      stripped = regex::Regex::new(pattern)
+        .expect("stripping regex isn't valid")
+        .replace_all(&full_content, "")
+        .into_owned();
+      &stripped
+    }
+    None => &full_content,
+  };
+
   // Only search for keywords in content after the answer marker
   const ANSWER_MARKER: &str = "<!-- Write your answer below -->";
-  let content = match full_content.find(ANSWER_MARKER) {
-    Some(pos) => &full_content[pos + ANSWER_MARKER.len()..],
-    None => {
-      return VerificationResult::zero(format!("Missing required marker line: {ANSWER_MARKER}"), threshold);
+  let content = if use_marker {
+    match full_content.find(ANSWER_MARKER) {
+      Some(pos) => &full_content[pos + ANSWER_MARKER.len()..],
+      None => {
+        return VerificationResult::zero(format!("Missing required marker line: {ANSWER_MARKER}"), threshold);
+      }
     }
+  } else {
+    full_content
   };
 
   let mut matched: usize = 0;
@@ -1541,64 +1565,13 @@ fn verify_markdown(exercise: &Exercise) -> VerificationResult {
 // PlantUML runner
 // ---------------------------------------------------------------------------
 
-/// Verify a PlantUML exercise by fuzzy-comparing the student's diagram against
-/// the reference `solution/main.puml`.
-///
-/// The score is the [`plantuml_similarity`] of the two sources
-/// (order-insensitive, tolerant of minor differences). Rendering the PNG is a
-/// separate, save-time concern ([`render_plantuml_png`]), not part of scoring.
-fn verify_plantuml(exercise: &Exercise, config: &ProjectConfig) -> VerificationResult {
-  let threshold = exercise.language.threshold();
+/// Regex removing PlantUML comments from a diagram source.
+const PUML_STRIP_COMMENTS: &str = "(?s:/'.*?'/)|(?s:/'.*)|(?m:^[ \t]*'.*$)";
 
-  // Check that the PlantUML jar can be resolved — same validation as
-  // `render_plantuml_png` so the user sees the error on the Output page
-  // rather than a silent failure.
-  if let Err(e) = resolve_plantuml(&config.plantuml) {
-    return VerificationResult::zero(e, threshold);
-  }
-  match Command::new("java").arg("-version").output() {
-    Ok(o) if o.status.success() => {}
-    Ok(_) | Err(_) => {
-      return VerificationResult::zero(
-        "Java not found. Please install Oracle Java JDK 21 and ensure \
-         'java' is available on your PATH."
-          .to_string(),
-        threshold,
-      );
-    }
-  }
-
-  let student = match fs::read_to_string(&exercise.source_path) {
-    Ok(s) => s,
-    Err(e) => return VerificationResult::zero(format!("Could not read your diagram: {e}"), threshold),
-  };
-
-  let solution_path = match &exercise.solution_source {
-    Some(p) => p,
-    None => return VerificationResult::zero("No reference solution to compare against.".to_string(), threshold),
-  };
-
-  // The reference may be sealed in a published student repo; read transparently.
-  let reference = match crate::solutions::read_maybe_sealed(solution_path) {
-    Ok(s) => s,
-    Err(e) => return VerificationResult::zero(format!("Could not read the reference solution: {e}"), threshold),
-  };
-
-  let score = plantuml_similarity(&reference, &student);
-  let passed = usize::from(score >= threshold);
-  let output = format!(
-    "PlantUML similarity to the reference diagram: {:.1}%\n(threshold to pass: {:.0}%)",
-    score * 100.0,
-    threshold * 100.0
-  );
-
-  VerificationResult {
-    score,
-    passed,
-    total: 1,
-    output,
-    threshold,
-  }
+/// Verify a PlantUML exercise by keyword/regex matching against the diagram
+/// source.
+fn verify_plantuml(exercise: &Exercise) -> VerificationResult {
+  verify_text(exercise, false, Some(PUML_STRIP_COMMENTS))
 }
 
 /// Best-effort home directory: `$HOME` (macOS/Linux), else `%USERPROFILE%`
@@ -1929,57 +1902,6 @@ pub fn diagnose(cfg: &ProjectConfig) -> Vec<ToolStatus> {
   out
 }
 
-/// Fuzzy similarity in `0.0..=1.0` between two PlantUML sources.
-///
-/// Both sources are reduced to canonical lines (trimmed, lower-cased,
-/// whitespace-collapsed, comments and `@startuml`/`@enduml` removed) and
-/// **sorted**, so ordering and formatting don't matter; the score is the
-/// normalized Levenshtein similarity of the result, so a single-line typo costs
-/// little while a missing or extra element costs proportionally more.
-fn plantuml_similarity(reference: &str, student: &str) -> f64 {
-  let a = normalize_puml(reference).join("\n");
-  let b = normalize_puml(student).join("\n");
-  match (a.is_empty(), b.is_empty()) {
-    (true, true) => 1.0,
-    (true, _) | (_, true) => 0.0,
-    _ => {
-      let a: Vec<char> = a.chars().collect();
-      let b: Vec<char> = b.chars().collect();
-      let max = a.len().max(b.len());
-      1.0 - levenshtein(&a, &b) as f64 / max as f64
-    }
-  }
-}
-
-/// Reduce a PlantUML source to canonical, comparable, sorted lines.
-fn normalize_puml(src: &str) -> Vec<String> {
-  let mut lines: Vec<String> = src
-    .lines()
-    .map(str::trim)
-    .filter(|l| !l.is_empty())
-    .filter(|l| !l.starts_with('\'')) // PlantUML single-line comment
-    .map(|l| l.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase())
-    .filter(|l| !l.starts_with("@start") && !l.starts_with("@end"))
-    .collect();
-  lines.sort();
-  lines
-}
-
-/// Levenshtein edit distance between two character slices.
-fn levenshtein(a: &[char], b: &[char]) -> usize {
-  let mut prev: Vec<usize> = (0..=b.len()).collect();
-  let mut curr = vec![0usize; b.len() + 1];
-  for (i, ca) in a.iter().enumerate() {
-    curr[0] = i + 1;
-    for (j, cb) in b.iter().enumerate() {
-      let cost = usize::from(ca != cb);
-      curr[j + 1] = (prev[j + 1] + 1).min(curr[j] + 1).min(prev[j] + cost);
-    }
-    std::mem::swap(&mut prev, &mut curr);
-  }
-  prev[b.len()]
-}
-
 // ---------------------------------------------------------------------------
 // ExerciseWatcher
 // ---------------------------------------------------------------------------
@@ -2055,48 +1977,116 @@ impl ExerciseWatcher {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::exercise::SolutionData;
 
-  // -- PlantUML similarity + env var resolution ---------------------------
+  const ANSWER_MARKER: &str = "<!-- Write your answer below -->";
 
-  #[test]
-  fn plantuml_identical_diagrams_score_one() {
-    let d = "@startuml\nAlice -> Bob: Hello\nBob --> Alice: Hi\n@enduml";
-    assert!((plantuml_similarity(d, d) - 1.0).abs() < 1e-9);
+  // -- verify_text keyword/regex matching ---------------------------------
+
+  // Test exercise builder
+  fn text_exercise(content: &str, keywords: &[&str]) -> Exercise {
+    let dir = std::env::temp_dir().join(format!(
+      "lq_test_verify_text_{}_{}",
+      std::process::id(),
+      LQ_TEST_COUNTER.fetch_add(1, Ordering::SeqCst)
+    ));
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("main.md"), content).unwrap();
+    Exercise {
+      id: "verify_text".to_string(),
+      name: "Verify Text".to_string(),
+      language: Language::Text,
+      difficulty: 1,
+      description: String::new(),
+      topics: vec![],
+      module_name: String::new(),
+      relative_path: String::new(),
+      dir: dir.clone(),
+      theory_path: None,
+      task_path: dir.join("02-task.md"),
+      source_path: dir.join("main.md"),
+      solution_source: None,
+      solution_data: Some(SolutionData {
+        title: "Verify Text".to_string(),
+        hints: vec![],
+        keywords: keywords.iter().map(|s| s.to_string()).collect(),
+        explanation: String::new(),
+      }),
+      test_count: 0,
+    }
   }
 
   #[test]
-  fn plantuml_order_comments_whitespace_ignored() {
-    let reference = "@startuml\nAlice -> Bob: Hello\nBob --> Alice: Hi\n@enduml";
-    let student = "@startuml\n' my diagram\nBob   -->   Alice:   Hi\nalice -> bob: hello\n@enduml";
-    assert!((plantuml_similarity(reference, student) - 1.0).abs() < 1e-9);
+  fn verify_text_plain_keyword_is_case_insensitive() {
+    let ex = text_exercise(&format!("{ANSWER_MARKER}\nRust uses **Ownership**.\n"), &["ownership", "missing"]);
+    let r = verify_text(&ex, true, None);
+    assert_eq!(r.total, 2);
+    assert_eq!(r.passed, 1);
+    assert!((r.score - 0.5).abs() < 1e-9);
+    assert!(r.output.contains("concepts missing"));
+    let _ = fs::remove_dir_all(&ex.dir);
   }
 
   #[test]
-  fn plantuml_small_typo_scores_high_but_not_perfect() {
-    let reference = "@startuml\nAlice -> Bob: Hello\n@enduml";
-    let student = "@startuml\nAlice -> Bob: Helo\n@enduml";
-    let s = plantuml_similarity(reference, student);
-    assert!(s > 0.85 && s < 1.0, "similarity was {s}");
+  fn verify_text_regex_keyword() {
+    // `[^-]->` matches a request arrow but not a `-->` reply arrow, which
+    // a plain "->" keyword could not distinguish.
+    let both = text_exercise(&format!("{ANSWER_MARKER}\nUser -> B\nB --> U\n"), &["[^-]->", "-->"]);
+    assert_eq!(verify_text(&both, true, None).passed, 2);
+
+    let reply_only = text_exercise(&format!("{ANSWER_MARKER}\nA --> B: ok\n"), &["[^-]->", "-->"]);
+    let r = verify_text(&reply_only, true, None);
+    assert_eq!(r.passed, 1);
+    assert_eq!(r.total, 2);
+    let _ = fs::remove_dir_all(&both.dir);
+    let _ = fs::remove_dir_all(&reply_only.dir);
   }
 
   #[test]
-  fn plantuml_missing_line_drops_below_pass_threshold() {
-    let reference = "@startuml\nA -> B\nB -> C\nC -> D\n@enduml";
-    let student = "@startuml\nA -> B\nB -> C\n@enduml";
-    let s = plantuml_similarity(reference, student);
-    assert!(s > 0.4 && s < 0.8, "similarity was {s}");
+  fn verify_text_invalid_regex_falls_back_to_substring() {
+    // "(" is not a valid regex; the keyword must then match literally.
+    let ex = text_exercise(&format!("{ANSWER_MARKER}\nRust (2015)\n"), &["("]);
+    let r = verify_text(&ex, true, None);
+    assert_eq!(r.passed, 1);
+    assert_eq!(r.total, 1);
+    let _ = fs::remove_dir_all(&ex.dir);
   }
 
   #[test]
-  fn plantuml_completely_different_scores_low() {
-    let reference = "@startuml\nAlice -> Bob: Hello\n@enduml";
-    let student = "@startuml\nclass Foo {\n  int x\n}\n@enduml";
-    assert!(plantuml_similarity(reference, student) < 0.5);
+  fn verify_text_marker_bounds_the_search() {
+    let ex = text_exercise(&format!("What is ownership?\n\n{ANSWER_MARKER}\n\nOwnership moves values.\n"), &["ownership"]);
+    assert_eq!(verify_text(&ex, true, None).passed, 1);
+    let _ = fs::remove_dir_all(&ex.dir);
   }
 
   #[test]
-  fn plantuml_empty_student_scores_zero() {
-    assert_eq!(plantuml_similarity("@startuml\nA -> B\n@enduml", "@startuml\n@enduml"), 0.0);
+  fn verify_text_missing_marker_scores_zero() {
+    let ex = text_exercise("no marker here, but ownership\n", &["ownership"]);
+    let r = verify_text(&ex, true, None);
+    assert_eq!(r.score, 0.0);
+    assert!(r.output.contains("Missing required marker line"), "got: {}", r.output);
+    let _ = fs::remove_dir_all(&ex.dir);
+  }
+
+  #[test]
+  fn verify_text_without_marker_searches_whole_file_ignoring_comments() {
+    let ex = text_exercise(
+      "@startuml\nA -> B: ping\n' User Browser Server\n/' POST /login 200 OK welcome '/\n@enduml\n",
+      &["ping", "User", "Browser", "Server", "POST /login", "200 OK", "welcome"],
+    );
+    let r = verify_text(&ex, false, Some(PUML_STRIP_COMMENTS));
+    assert_eq!(r.total, 7);
+    assert_eq!(r.passed, 1, "only the real diagram line should match: {}", r.output);
+    let _ = fs::remove_dir_all(&ex.dir);
+  }
+
+  #[test]
+  fn verify_text_no_keywords_scores_zero() {
+    let ex = text_exercise(&format!("{ANSWER_MARKER}\n"), &[]);
+    let r = verify_text(&ex, true, None);
+    assert_eq!(r.score, 0.0);
+    assert!(r.output.contains("No keywords defined"), "got: {}", r.output);
+    let _ = fs::remove_dir_all(&ex.dir);
   }
 
   #[test]

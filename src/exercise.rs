@@ -31,7 +31,7 @@ pub enum Language {
   Go,
   /// C++ (`main.cpp`)
   Cpp,
-  /// PlantUML diagram (`main.puml`), scored by fuzzy similarity to the solution.
+  /// PlantUML diagram (`main.puml`), scored by keyword/regex matching against the solution source.
   Plantuml,
   /// Markdown / plain-text questions (`main.md`)
   Text,
@@ -78,7 +78,7 @@ impl Language {
       Language::Go => 1.0,
       Language::Cpp => 1.0,
       Language::Riscv => 0.8,
-      // Fuzzy diagram match: require high but not exact similarity.
+      // Keyword match: require most keywords to be present.
       Language::Plantuml => 0.8,
       Language::Text => 0.75,
     }
@@ -512,8 +512,7 @@ fn count_tests(exercise_dir: &Path, language: Language, source_path: &Path) -> u
       .unwrap_or(0),
     Language::Python => count_lines(source_path, |l| l.starts_with("def test")),
     Language::Riscv => count_lines(source_path, |l| l.starts_with("# EXPECT_REG:") || l.starts_with("; EXPECT_REG:")),
-    // A single fuzzy-similarity check against the reference diagram.
-    Language::Plantuml => 1,
+    Language::Plantuml => 0,
     Language::Text => 0,
   }
 }

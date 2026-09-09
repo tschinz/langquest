@@ -195,7 +195,7 @@ Depending on which languages your exercises use, install the corresponding toolc
 | **C++** | `g++` (Xcode CLT / `apt install g++`) and [Catch2](https://github.com/catchorg/Catch2) (`brew install catch2` / `apt install catch2`) |
 | **RISC-V** | GNU toolchain (`apt install gcc-riscv64-linux-gnu`) or [Ripes](https://github.com/mortbopet/Ripes) simulator |
 | **PlantUML** | [Oracle Java JDK 21](https://www.oracle.com/java/technologies/downloads/) (`java` on PATH) and the `PLANTUML_JAR` environment variable pointing to `plantuml.jar` (or set `plantuml.bin` in `lq.toml`) |
-| **Markdown** | No additional tools required - verification is regex-based |
+| **Markdown** | No additional tools required - verification is keyword/regex-based |
 
 > **Quick setup:** Run `just setup` to install all toolchains automatically (macOS, Linux, and Windows supported).
 
@@ -662,9 +662,9 @@ def test_add_negative():
 
 ```
 
-> **Note:** The `<!-- Write your answer below -->` marker line is **mandatory** for text exercises. Keywords are only searched in the content that appears after this marker, so students can read the question without accidentally matching keywords in it.
+> **Note:** The `<!-- Write your answer below -->` marker line is **mandatory** for text exercises. Keywords are only searched in the content that appears after this marker, so students can read the question without accidentally matching keywords in it. Keywords are matched as case-insensitive regular expressions. A keyword that is not valid regex falls back to substring matching.
 
-**PlantUML** (`main.puml`) - Diagrams graded by fuzzy similarity to `solution/main.puml`:
+**PlantUML** (`main.puml`) - Diagrams graded by keyword/regex matching against the `keywords` in `solution/solution.md`. The reference diagram in `solution/main.puml` is also required as it's used as the reference solution
 
 ```plantuml
 @startuml
@@ -672,7 +672,7 @@ def test_add_negative():
 @enduml
 ```
 
-On save the diagram is rendered to `main.png`. It is opened once in the configured `[ide]` (or the OS default image viewer if none is found); later saves re-render the file in place, which the editor auto-reloads, so no duplicate tabs are opened. Rendering requires Oracle Java JDK 21 on PATH and the `PLANTUML_JAR` environment variable pointing to `plantuml.jar`; set `plantuml.bin` in `lq.toml` to override the jar path. Scoring is order-insensitive and tolerant of minor differences, with a `0.8` pass threshold.
+On save the diagram is rendered to `main.png`. It is opened once in the configured `[ide]` (or the OS default image viewer if none is found); later saves re-render the file in place, which the editor auto-reloads, so no duplicate tabs are opened. Rendering requires Oracle Java JDK 21 on PATH and the `PLANTUML_JAR` environment variable pointing to `plantuml.jar`; set `plantuml.bin` in `lq.toml` to override the jar path. Grading uses the same keyword/regex matching as Markdown, searched over the whole diagram source.
 
 Get the latest PlantUML jar from [https://plantuml.com/download](https://plantuml.com/download) and set the environment variable or the `plantuml.bin` path in `lq.toml`:
 
@@ -723,15 +723,17 @@ keywords = ["mut", "let", "i32"]
 To add two numbers in Rust, simply use the `+` operator. The function
 returns the last expression automatically when there's no semicolon.
 
-The `keywords` array is used for Markdown/conceptual exercises to score
-free-text answers via regex matching.
+The `keywords` array is used for Markdown and PlantUML exercises to score
+submissions by keyword/regex matching. Each keyword is first tried to be
+matched as a case-insensitive regular expression. If that fails, it falls
+back to an (also case-insensitive) substring search.
 ```
 
 | Field | Description |
 |-------|-------------|
 | `title` | Display name for the solution |
 | `hints` | Ordered list revealed one at a time with `h` |
-| `keywords` | Regex patterns for scoring Markdown exercises |
+| `keywords` | Regex patterns for scoring Markdown and PlantUML exercises |
 | body | Prose explanation shown on the Solution page |
 
 ## CLI Reference
@@ -803,7 +805,7 @@ the results as TOML.
 | `pulldown-cmark` | Markdown rendering |
 | `toml` + `serde` | Configuration and frontmatter parsing |
 | `serde_json` | JSON serialization |
-| `regex` | Keyword matching for Markdown exercises |
+| `regex` | Keyword/regex matching for Markdown and PlantUML exercises |
 | `anyhow` | Error propagation |
 | `thiserror` | Typed domain errors |
 | `chacha20poly1305` | Encryption for progress and sealed solutions |
