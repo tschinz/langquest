@@ -226,7 +226,7 @@ pub fn verify(exercise: &Exercise, config: &ProjectConfig, cancel: &VerifyCancel
     Language::Python => verify_python(exercise, &config.python, cancel),
     Language::Go => verify_go(exercise, &config.go, cancel),
     Language::Cpp => verify_cpp(exercise, &config.cpp, cancel),
-    Language::Plantuml => verify_plantuml(exercise),
+    Language::Plantuml => verify_text(exercise, false, Some("(?s:/'.*?'/)|(?s:/'.*)|(?m:^[ \t]*'.*$)")),
     Language::Text => verify_text(exercise, true, None),
   }
 }
@@ -1565,15 +1565,6 @@ fn verify_text(exercise: &Exercise, use_marker: bool, strip: Option<&str>) -> Ve
 // PlantUML runner
 // ---------------------------------------------------------------------------
 
-/// Regex removing PlantUML comments from a diagram source.
-const PUML_STRIP_COMMENTS: &str = "(?s:/'.*?'/)|(?s:/'.*)|(?m:^[ \t]*'.*$)";
-
-/// Verify a PlantUML exercise by keyword/regex matching against the diagram
-/// source.
-fn verify_plantuml(exercise: &Exercise) -> VerificationResult {
-  verify_text(exercise, false, Some(PUML_STRIP_COMMENTS))
-}
-
 /// Best-effort home directory: `$HOME` (macOS/Linux), else `%USERPROFILE%`
 /// (Windows).
 fn home_dir() -> Option<String> {
@@ -2074,7 +2065,7 @@ mod tests {
       "@startuml\nA -> B: ping\n' User Browser Server\n/' POST /login 200 OK welcome '/\n@enduml\n",
       &["ping", "User", "Browser", "Server", "POST /login", "200 OK", "welcome"],
     );
-    let r = verify_text(&ex, false, Some(PUML_STRIP_COMMENTS));
+    let r = verify_text(&ex, false, Some("(?s:/'.*?'/)|(?s:/'.*)|(?m:^[ \t]*'.*$)"));
     assert_eq!(r.total, 7);
     assert_eq!(r.passed, 1, "only the real diagram line should match: {}", r.output);
     let _ = fs::remove_dir_all(&ex.dir);
