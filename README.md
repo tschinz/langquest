@@ -456,6 +456,7 @@ Each exercise lives in its own directory within a module:
     ├── 01-theory.md           ← optional background reading
     ├── 02-task.md             ← required task description with frontmatter
     ├── main.<ext>             ← student source file (rs, go, cpp, py, md, asm, puml)
+    │                            (name overridable via the `source` task field)
     ├── opt: Cargo.toml        ← *optional* rust cargo project file
     └── solution/
         ├── main.<ext>         ← reference solution
@@ -496,6 +497,7 @@ the string `"Hello, World!"` exactly.
 | `difficulty`  | integer (1-5)                                    | Shown as stars in the Overview |
 | `description` | string                                           | One-line summary |
 | `topics`      | array                                            | Tags shown in the Topics column |
+| `source`      | string (optional)                                | Student source file name; overrides the default `main.<ext>` |
 
 #### Student Source File (main.*)
 

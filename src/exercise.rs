@@ -238,12 +238,13 @@ pub struct Exercise {
   pub theory_path: Option<PathBuf>,
   /// Path to `02-task.md`.
   pub task_path: PathBuf,
-  /// Path to the student source file (`main.*`).
+  /// Path to the student source file (`main.*` or the `source` RawFrontmatter overwrite).
   pub source_path: PathBuf,
   /// Additional file names relative to the exercise directory whose changes
   /// should trigger re-verification.
   pub reload_files: Vec<&'static str>,
-  /// Path to `solution/main.*`, if present.
+  /// Path to `solution/main.*` (or a solution file matching a custom
+  /// `source` override), if present.
   pub solution_source: Option<PathBuf>,
   /// Parsed contents of `solution/solution.md`, if present.
   pub solution_data: Option<SolutionData>,
@@ -303,6 +304,7 @@ struct RawFrontmatter {
   difficulty: Option<u8>,
   description: Option<String>,
   topics: Option<Vec<String>>,
+  source: Option<String>, // Optional source *overwrite*
 }
 
 /// Split a markdown document into its TOML frontmatter and body.
@@ -356,6 +358,7 @@ struct ValidatedFrontmatter {
   difficulty: u8,
   description: String,
   topics: Vec<String>,
+  source: Option<String>,
 }
 
 /// Validate and convert [`RawFrontmatter`] into the fields needed by [`Exercise`].
@@ -411,6 +414,7 @@ fn validate_frontmatter(raw: RawFrontmatter, path: &Path) -> Result<ValidatedFro
     difficulty,
     description,
     topics,
+    source: raw.source,
   })
 }
 
@@ -440,8 +444,17 @@ pub fn load_exercise(exercise_dir: &Path, module_name: &str) -> Result<Exercise,
 
   let fm = validate_frontmatter(raw, &task_path)?;
 
-  // -- Locate student source file (main.*) --------------------------------
-  let source_path = find_student_source(exercise_dir)?;
+  // -- Locate student source file (main.* or frontmatter override) --------
+  let source_path = match &fm.source {
+    Some(file_name) => {
+      let path = exercise_dir.join(file_name);
+      if !path.is_file() {
+        return Err(ExerciseError::NoSourceFile { path });
+      }
+      path
+    }
+    None => find_student_source(exercise_dir)?,
+  };
 
   // -- Additional files triggering a reload -------------------------------
   let reload_files = fm.language.reload_trigger_files();
@@ -454,7 +467,7 @@ pub fn load_exercise(exercise_dir: &Path, module_name: &str) -> Result<Exercise,
   let solution_data = load_solution_data(exercise_dir)?;
 
   // -- Optional: solution/main.* ------------------------------------------
-  let solution_source = find_solution_source(exercise_dir);
+  let solution_source = find_solution_source(exercise_dir, &source_path);
 
   // -- Count unit tests statically ---------------------------------------
   let test_count = count_tests(exercise_dir, fm.language, &source_path);
@@ -606,12 +619,21 @@ fn load_solution_data(exercise_dir: &Path) -> Result<Option<SolutionData>, Exerc
   }))
 }
 
-/// Find `solution/main.*` if it exists.
-fn find_solution_source(exercise_dir: &Path) -> Option<PathBuf> {
+/// Find the reference solution source in `solution/`.
+///
+/// Prefers a file named after the student source (so `source = "exercise.rs"`
+/// maps to `solution/exercise.rs`), falling back to the default `main.*`.
+fn find_solution_source(exercise_dir: &Path, source_path: &Path) -> Option<PathBuf> {
   let solution_dir = exercise_dir.join("solution");
 
   if !solution_dir.is_dir() {
     return None;
+  }
+
+  if let Some(file_name) = source_path.file_name()
+    && solution_dir.join(file_name).is_file()
+  {
+    return Some(solution_dir.join(file_name));
   }
 
   let entries = fs::read_dir(&solution_dir).ok()?;
@@ -887,6 +909,35 @@ Do the thing.
     assert!(exercise.solution_source.is_some());
     assert!(exercise.solution_data.is_some());
     assert_eq!(exercise.solution_data.as_ref().unwrap().title, "Hello World");
+
+    let _ = fs::remove_dir_all(&tmp);
+  }
+
+  #[test]
+  fn test_load_exercise_source_override() {
+    let tmp = std::env::temp_dir().join("lq_test_source_override");
+    let _ = fs::remove_dir_all(&tmp);
+
+    let ex_dir = tmp.join("01-mod").join("01-custom");
+    let sol_dir = ex_dir.join("solution");
+    fs::create_dir_all(&sol_dir).unwrap();
+
+    fs::write(
+      ex_dir.join("02-task.md"),
+      "---\nid=\"custom\"\nname=\"Custom\"\nlanguage=\"rust\"\ndifficulty=1\ndescription=\"d\"\ntopics=[]\nsource=\"exercise.rs\"\n---\n",
+    )
+    .unwrap();
+    fs::write(ex_dir.join("exercise.rs"), "fn main() {}").unwrap();
+    fs::write(sol_dir.join("exercise.rs"), "fn main() { println!(\"hi\"); }").unwrap();
+
+    let exercise = load_exercise(&ex_dir, "01-mod").unwrap();
+    assert_eq!(exercise.source_path, ex_dir.join("exercise.rs"));
+    assert_eq!(exercise.solution_source, Some(sol_dir.join("exercise.rs")));
+
+    // Missing override file is an error.
+    fs::write(ex_dir.join("exercise.rs.bak"), "").unwrap();
+    fs::remove_file(ex_dir.join("exercise.rs")).unwrap();
+    assert!(load_exercise(&ex_dir, "01-mod").is_err());
 
     let _ = fs::remove_dir_all(&tmp);
   }
