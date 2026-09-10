@@ -2029,6 +2029,7 @@ mod tests {
         explanation: String::new(),
       }),
       test_count: 0,
+      reload_files: vec![],
     }
   }
 
