@@ -2,6 +2,105 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0] - 2026-09-10
+
+### 🚀 Features
+
+- *(scripts)* One-call install scripts for latest release ([07d7716](https://github.com/tschinz/lq/commit/07d7716f27ab8830743747cd2f165c32332496d4) - axel.amand)
+- *(doc)* Install latest one-line link pointing to main branch ([07dc1b0](https://github.com/tschinz/lq/commit/07dc1b03601964c01582446cf48e9102cebb4c10) - axel.amand)
+- *(cli)* Add -k /--keys ([420e83d](https://github.com/tschinz/lq/commit/420e83dcbf2f980a6cc3ffee500bc21a27097e58) - axel.amand)
+- *(ci)* Linux musl release ([a222917](https://github.com/tschinz/lq/commit/a222917cf0c868c7def47e0bc5f650064ecb3a46) - Axam)
+- *(crypto)* Allow arbitrary key sizes ([28441b9](https://github.com/tschinz/lq/commit/28441b948803b8fbca7d91b07d909c0513128ec7) - mel-64)
+- *(save-counter)* Add save-counter feature ([1e34a87](https://github.com/tschinz/lq/commit/1e34a87d8b7d6451bc918877393adac6d5af02cd) - mel-64)
+- *(rust-project)* Autocreate .rust-project on rust exercise entry ([1417242](https://github.com/tschinz/lq/commit/141724267f4896e514d6528b96da61f9f5d2b719) - mel-64)
+- *(cli)* Add -r shorthand flag ([ef28458](https://github.com/tschinz/lq/commit/ef28458c17683efcf869623942d9aa13481c6352) - mel-64)
+- *(plantuml)* Remove plantuml.jar from the assests. It's up to the users to install plantuml and provide the path through env variable ([759aff1](https://github.com/tschinz/lq/commit/759aff12aaf4a6aec6c5bf124e32338c89c5f966) - Borgeat Rémy)
+- *(just)* Add plantuml toolchain installation in the just setup recipe ([7f1fe82](https://github.com/tschinz/lq/commit/7f1fe82aa49b163e7130ff9ec3d81fb9abe0e1d0) - zas)
+- *(tooolchain)* Check toolchain setup at startup. ([71f09f5](https://github.com/tschinz/lq/commit/71f09f5deb3abc8659ae460f295c1a1159153c34) - zas)
+- *(grading)* Add grading flag which does not validate identity nor write to progress file ([d757cae](https://github.com/tschinz/lq/commit/d757caeb4b30b32239867c42cc6fb5250f4a5d35) - mel-64)
+- Add keybind for opening dir in editor ([edb5cca](https://github.com/tschinz/lq/commit/edb5ccaf89199bb71393bdbaf26bb370856548ea) - mel-64)
+- Add config polling option ([5357d72](https://github.com/tschinz/lq/commit/5357d725d142744f7af28b23a54bdfcc94e2b719) - mel-64)
+- *(rust/cargo)* Add cargo compatibility ([68cac5e](https://github.com/tschinz/lq/commit/68cac5ec423a9ea13eea7a377073f2180e334395) - mel-64)
+- *(lq.toml)* Use defaults if not set ([4d7b671](https://github.com/tschinz/lq/commit/4d7b671df737642c95773e51f4a53434daa6701b) - mel-64)
+- *(plantuml)* [**breaking**] Add plantuml regex grading ([f1a10e5](https://github.com/tschinz/lq/commit/f1a10e5ee2ef3b4b0a2925178505f875dbbd62ea) - mel-64)
+- *(plantuml)* Match reges literals and whitepace ignores literals ([4882b4f](https://github.com/tschinz/lq/commit/4882b4fde69222214c7026f98bd5b1e463dd680f) - zas)
+- Allow overwriting the source file in 02-task.md ([dd197db](https://github.com/tschinz/lq/commit/dd197db9becb80741aa479290cf550c386039929) - mel-64)
+
+### 🐛 Bug Fixes
+
+- *(scripts)* Fixed to latest release download ([1587b2c](https://github.com/tschinz/lq/commit/1587b2c607a70724926c657b3d74b3b7d3331b5f) - axel.amand)
+- *(ci)* Passes secrets in release build ([b5fb286](https://github.com/tschinz/lq/commit/b5fb286c1f28ce0a07bb8defec8a992e147e9388) - axel.amand)
+- *(build)* Don't rebuild due to .env{ , .template} if it isn't present ([ae4b76f](https://github.com/tschinz/lq/commit/ae4b76f8953fc4f58c1563bc3a01ed915d6e73ed) - mel-64)
+- *(save-counter)* Show overall times saved in CLI stats output ([3110333](https://github.com/tschinz/lq/commit/31103334d6119cb7abe12f37e23426f89898f3e1) - mel-64)
+- *(rust-tests)* Fix rust tests including errors like stacktraces counting an incorrect total ([094add5](https://github.com/tschinz/lq/commit/094add57a9bfd3a918cec16c59a7b15997430150) - mel-64)
+- *(rust-score-parsing)* Use clean test output for student score parsing ([07d6178](https://github.com/tschinz/lq/commit/07d61785e1e7ddf358cc86bd87d7705da14aa5a6) - mel-64)
+- *(output)* Use stdout instead of stderr for TUI ([56bde48](https://github.com/tschinz/lq/commit/56bde48b00962896995e05baf0bbdca95284b98f) - mel-64)
+- *(build)* Correct MSRV ([307e220](https://github.com/tschinz/lq/commit/307e22083b48e68ff8377841eb832373dc8a8231) - mel-64)
+- *(ci)* Fix rustfmt ([f468be4](https://github.com/tschinz/lq/commit/f468be46bae3a08a4589278f88ee68c63a0bca2c) - Borgeat Rémy)
+- *(test)* Add example opf missing plantuml config in the example ([5907a61](https://github.com/tschinz/lq/commit/5907a61695c7a435d1b0e609ccdb95680a30623a) - zas)
+- *(startup)* Do not generate and open if we start on a plantuml exercises ([48f36df](https://github.com/tschinz/lq/commit/48f36df8959d61df7eda5bd6933c60c7e089f22d) - zas)
+- *(eprint)* Tui own stdout therefore pretui use stderr ([4dfd235](https://github.com/tschinz/lq/commit/4dfd235c9c257fcdfd80c5aa5de0cdadf22bedb0) - zas)
+- *(TUI)* Remove stray debug println ([3c05313](https://github.com/tschinz/lq/commit/3c0531398df4d48a4c8957fa460f936114a857b2) - melody)
+- *(debug_output)* Cap debug output to MAX_OUTPUT_LINES ([2f5bd25](https://github.com/tschinz/lq/commit/2f5bd25d34928667cbbfdd6a82ae79a7d18c5fdc) - mel-64)
+- *(grading)* Lock behind feature flag, disallowing students to cheat ([696a491](https://github.com/tschinz/lq/commit/696a491675f44124de02197a961e350791cf7630) - mel-64)
+- *(cargo)* Fix cargo build cache and more explicit error-handling ([814c261](https://github.com/tschinz/lq/commit/814c261646ae7a7afdf5d8cacd4911d06aeb8e0e) - mel-64)
+- *(just)* Since the addition of cargo exercise we need to precise which binary to install ([41001d0](https://github.com/tschinz/lq/commit/41001d0ef02ff9a9e38047d8862c5c5a12cbbfaa) - zas)
+- *(sample-repo)* Add missing file content ([f3a731f](https://github.com/tschinz/lq/commit/f3a731fe2a1e98c5f57e12224808894c560565dd) - mel-64)
+- *(child-hanging)* Fix child hanging due to full pipe buffer ([20bb9d3](https://github.com/tschinz/lq/commit/20bb9d3cfa3106027c0cb8a72e03bf9d5280d362) - mel-64)
+- *(cargo-toml-watcher)* Fix cargo.toml not triggering re-validation ([6ce63d8](https://github.com/tschinz/lq/commit/6ce63d800b6fe4a95cfe908498bc5967c1dfdae0) - mel-64)
+- *(runer)* Reload files struct was missing ([50df709](https://github.com/tschinz/lq/commit/50df709fc5879517717d237194d252e34cd4c32c) - zas)
+
+### 💼 Other
+
+- Merge pull request #15 from tschinz/feat/one-line-release-install
+
+HEI | One-line release install with hidden keys ([8cfee9b](https://github.com/tschinz/lq/commit/8cfee9b7ea3b46632d0e2c5ba9eaa78fae83b046) - Axel Amand)
+- Rename 'keys' argument short flag from 'v' to 'k'fix(app): -k wrongly parsed ([386622c](https://github.com/tschinz/lq/commit/386622caa01b0eb4950cb5430c98a6d9b6d41e6a) - Axel Amand)
+- Merge pull request #17 from tschinz/ci/linux-musl
+
+Linux MUSL build ([105d920](https://github.com/tschinz/lq/commit/105d920a09c9071dee868160ece17ec0f0ef7d1d) - Qarmma)
+- Merge branch 'main' into feat/grading ([1d4aad1](https://github.com/tschinz/lq/commit/1d4aad151f7378eeb9f47edc3d1805f134377177) - tschinz)
+- Merge pull request #49 from mel-64/chore/update-workflows
+
+chore(ci): update workflow tags ([2e044c0](https://github.com/tschinz/lq/commit/2e044c02b0f8e98ecd4f1ca87a3ab6977911b16d) - melody)
+- Merge branch 'main' into feat/source-file-overwrite ([72dd18d](https://github.com/tschinz/lq/commit/72dd18df9cab1d4296c93fd3bb04da7cefe0146a) - mel-64)
+- Merge commit 'pullrequests/mel-64/feat/source-file-overwrite' ([be048a9](https://github.com/tschinz/lq/commit/be048a997af24fc9ed88ea21d87571b7ae502247) - zas)
+
+### 🚜 Refactoring
+
+- *(app.rs)* Rename maybe_create_rust_project to maybe_create_rust_project_json ([8b276e0](https://github.com/tschinz/lq/commit/8b276e03127495ffb452bcec0e1a423a51bb8a6b) - mel-64)
+- *(plantuml)* Inline puml comment stripping regex ([4890cc7](https://github.com/tschinz/lq/commit/4890cc70a19af8556424b6097ff318a9bf162bba) - mel-64)
+
+### 📚 Documentation
+
+- *(arb. key sizes)* Add documentation to .env.template ([9ba57c2](https://github.com/tschinz/lq/commit/9ba57c2d4f746dc15fa45446904590ba49ebf4e7) - mel-64)
+- *(testing)* Add test dependency section to README.md ([5dd01bd](https://github.com/tschinz/lq/commit/5dd01bd44ade76d3fc52ea3c2e63ddac16ddd710) - mel-64)
+- *(readme)* Update stats file output docs ([da949d6](https://github.com/tschinz/lq/commit/da949d62f2d63181dfef2214760b7b1df3588746) - mel-64)
+- *(readme)* Add some plantuml information ([b35885f](https://github.com/tschinz/lq/commit/b35885fe0988cefeb87e0c5097ac88b1a332cf29) - zas)
+- *(grading-mode)* Add documentation section to README.md ([f58b955](https://github.com/tschinz/lq/commit/f58b955384b8a780a55e7b96b81dd1a910906ef1) - mel-64)
+- *(readme)* Update various README.md docs ([5b1ff7c](https://github.com/tschinz/lq/commit/5b1ff7cba00a9cfba54b7461ed9aeb9a1e0ffbb1) - mel-64)
+- *(keybinds)* Add keybind docs to README.md ([1a262c8](https://github.com/tschinz/lq/commit/1a262c8d9774838bb334309f26ec9b19e1c9803c) - mel-64)
+- *(polling watcher)* Add docs to README.md ([1c99875](https://github.com/tschinz/lq/commit/1c998758b67a20c6b35875535b2b5b6fe9c66c24) - mel-64)
+- *(cargo)* Document cargo examples ([c24ecf0](https://github.com/tschinz/lq/commit/c24ecf056efefb928c135eef38d0d4f409679370) - mel-64)
+
+### 🧪 Testing
+
+- *(cargo)* Add default cmd_cargo to rust section ([b1f271b](https://github.com/tschinz/lq/commit/b1f271bede4dc382267b7dfaf4e70b57b7063739) - mel-64)
+- *(cargo)* Add cargo test project ([baafa3b](https://github.com/tschinz/lq/commit/baafa3b8ca0f5b35dba3ea1abd5ed64e87ed8c66) - mel-64)
+
+### ⚙️ Miscellaneous Tasks
+
+- *(cargo.toml)* Add rust-version ([6ae13a0](https://github.com/tschinz/lq/commit/6ae13a0639c0cfb85ee4f9d3fbdba93de1a27347) - mel-64)
+- Clippy fixes ([c2e6c6e](https://github.com/tschinz/lq/commit/c2e6c6e8c845b092ad84538907a6ebd4c5041259) - mel-64)
+- Bump msrv to 1.88.0 ([c431a7e](https://github.com/tschinz/lq/commit/c431a7eaa876f732238f31e8d14a15c8f62f3be8) - mel-64)
+- Add Cargo.lock ([5f4d060](https://github.com/tschinz/lq/commit/5f4d060c6bfc9dce52b3d324e8c16739d637edfa) - mel-64)
+- Update .gitignore ([44bf8a8](https://github.com/tschinz/lq/commit/44bf8a8a1c47e4cf2e6370845060e3c400a20d04) - mel-64)
+- *(ci)* Update workflow tags ([963ad08](https://github.com/tschinz/lq/commit/963ad082639a9b34ac31e474f389902034518d19) - mel-64)
+- Fmt fixes ([c6fa4da](https://github.com/tschinz/lq/commit/c6fa4dac33476d3b357e092b02ea198ee6a99723) - mel-64)
+
+
+**Full Changelog**: [v0.1.0...0.2.0](https://github.com/tschinz/lq/compare/v0.1.0...0.2.0)
+
 ## [0.1.0] - 2026-08-04
 
 ### 🚀 Features
