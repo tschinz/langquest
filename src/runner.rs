@@ -2083,12 +2083,7 @@ mod tests {
   fn verify_text_whitespace_insensitive_keyword() {
     // `w/.../` ignores spaces and tabs on both sides, so a single keyword
     // matches every spacing variant of the same message.
-    let variants = [
-      "login(user, pass)",
-      "login ( user , pass )",
-      "login(user,pass)",
-      "login(\tuser,pass )",
-    ];
+    let variants = ["login(user, pass)", "login ( user , pass )", "login(user,pass)", "login(\tuser,pass )"];
     for body in variants {
       let ex = text_exercise(&format!("{ANSWER_MARKER}\n{body}\n"), &["w/login(user, pass)/"]);
       let r = verify_text(&ex, true, None);
