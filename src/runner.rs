@@ -1468,9 +1468,13 @@ fn parse_unittest_output(output: &str, threshold: f64) -> VerificationResult {
 
 /// Check the student's submission against the keywords from the solution data.
 ///
-/// Keywords are matched as case-insensitive regular expressions. A keyword
-/// that is not a valid pattern falls back to a plain case-insensitive
-/// substring search.
+/// Each keyword selects its matching mode by its wrapper:
+///
+/// * `s/PATTERN/` — `PATTERN` is a case-insensitive regular expression.
+/// * `w/TEXT/` — case-insensitive substring search for `TEXT` with all spaces
+///   and tabs ignored on both sides, so `login(user, pass)` matches
+///   `login ( user,pass )`.
+/// * anything else — plain case-insensitive substring search, verbatim.
 ///
 /// `use_marker` restricts matching to the content after the answer-marker
 /// line.
@@ -1479,6 +1483,32 @@ fn parse_unittest_output(output: &str, threshold: f64) -> VerificationResult {
 /// submission before matching.
 ///
 /// Score is `matched / total_keywords`.
+/// Remove every space and tab from `s` (newlines are kept as separators).
+fn drop_spaces_tabs(s: &str) -> String {
+  s.chars().filter(|&c| c != ' ' && c != '\t').collect()
+}
+
+/// Match a single keyword against `content`, selecting the mode from its
+/// wrapper. See [`verify_text`] for the syntax.
+fn keyword_matches(kw: &str, content: &str) -> bool {
+  if let Some(pattern) = kw.strip_prefix("s/").and_then(|k| k.strip_suffix('/')) {
+    // `s/PATTERN/` — case-insensitive regex. An invalid pattern never matches.
+    return RegexBuilder::new(pattern)
+      .case_insensitive(true)
+      .build()
+      .map(|re| re.is_match(content))
+      .unwrap_or(false);
+  }
+
+  if let Some(text) = kw.strip_prefix("w/").and_then(|k| k.strip_suffix('/')) {
+    // `w/TEXT/` — case-insensitive substring, spaces and tabs ignored on both sides.
+    return drop_spaces_tabs(&content.to_lowercase()).contains(&drop_spaces_tabs(&text.to_lowercase()));
+  }
+
+  // Plain literal — case-insensitive substring, verbatim.
+  content.to_lowercase().contains(&kw.to_lowercase())
+}
+
 fn verify_text(exercise: &Exercise, use_marker: bool, strip: Option<&str>) -> VerificationResult {
   let threshold = exercise.language.threshold();
 
@@ -1530,12 +1560,7 @@ fn verify_text(exercise: &Exercise, use_marker: bool, strip: Option<&str>) -> Ve
   let mut unmatched: Vec<&str> = Vec::new();
 
   for kw in keywords {
-    let found = match RegexBuilder::new(kw).case_insensitive(true).build() {
-      Ok(re) => re.is_match(content),
-      // If the keyword is not a valid regex pattern, fall back to a
-      // plain case-insensitive substring search.
-      Err(_) => content.to_lowercase().contains(&kw.to_lowercase()),
-    };
+    let found = keyword_matches(kw, content);
 
     if found {
       matched += 1;
@@ -2020,12 +2045,12 @@ mod tests {
 
   #[test]
   fn verify_text_regex_keyword() {
-    // `[^-]->` matches a request arrow but not a `-->` reply arrow, which
+    // `s/[^-]->/` matches a request arrow but not a `-->` reply arrow, which
     // a plain "->" keyword could not distinguish.
-    let both = text_exercise(&format!("{ANSWER_MARKER}\nUser -> B\nB --> U\n"), &["[^-]->", "-->"]);
+    let both = text_exercise(&format!("{ANSWER_MARKER}\nUser -> B\nB --> U\n"), &["s/[^-]->/", "-->"]);
     assert_eq!(verify_text(&both, true, None).passed, 2);
 
-    let reply_only = text_exercise(&format!("{ANSWER_MARKER}\nA --> B: ok\n"), &["[^-]->", "-->"]);
+    let reply_only = text_exercise(&format!("{ANSWER_MARKER}\nA --> B: ok\n"), &["s/[^-]->/", "-->"]);
     let r = verify_text(&reply_only, true, None);
     assert_eq!(r.passed, 1);
     assert_eq!(r.total, 2);
@@ -2034,12 +2059,46 @@ mod tests {
   }
 
   #[test]
-  fn verify_text_invalid_regex_falls_back_to_substring() {
-    // "(" is not a valid regex; the keyword must then match literally.
-    let ex = text_exercise(&format!("{ANSWER_MARKER}\nRust (2015)\n"), &["("]);
+  fn verify_text_plain_keyword_is_literal_not_regex() {
+    // Without the `s/.../` wrapper, regex metacharacters are matched verbatim:
+    // `[^-]->` is literal text that is absent, while its regex form matches.
+    let ex = text_exercise(&format!("{ANSWER_MARKER}\nUser -> B\n"), &["[^-]->", "s/[^-]->/"]);
     let r = verify_text(&ex, true, None);
-    assert_eq!(r.passed, 1);
+    assert_eq!(r.passed, 1, "only the regex keyword should match: {}", r.output);
+    assert_eq!(r.total, 2);
+    let _ = fs::remove_dir_all(&ex.dir);
+  }
+
+  #[test]
+  fn verify_text_invalid_regex_scores_no_match() {
+    // A malformed `s/.../` pattern (unbalanced paren) never matches.
+    let ex = text_exercise(&format!("{ANSWER_MARKER}\nRust (2015)\n"), &["s/(/"]);
+    let r = verify_text(&ex, true, None);
+    assert_eq!(r.passed, 0);
     assert_eq!(r.total, 1);
+    let _ = fs::remove_dir_all(&ex.dir);
+  }
+
+  #[test]
+  fn verify_text_whitespace_insensitive_keyword() {
+    // `w/.../` ignores spaces and tabs on both sides, so a single keyword
+    // matches every spacing variant of the same message.
+    let variants = [
+      "login(user, pass)",
+      "login ( user , pass )",
+      "login(user,pass)",
+      "login(\tuser,pass )",
+    ];
+    for body in variants {
+      let ex = text_exercise(&format!("{ANSWER_MARKER}\n{body}\n"), &["w/login(user, pass)/"]);
+      let r = verify_text(&ex, true, None);
+      assert_eq!(r.passed, 1, "should match {body:?}: {}", r.output);
+      let _ = fs::remove_dir_all(&ex.dir);
+    }
+
+    // A genuine difference (missing arg) still fails.
+    let ex = text_exercise(&format!("{ANSWER_MARKER}\nlogin(user)\n"), &["w/login(user, pass)/"]);
+    assert_eq!(verify_text(&ex, true, None).passed, 0);
     let _ = fs::remove_dir_all(&ex.dir);
   }
 

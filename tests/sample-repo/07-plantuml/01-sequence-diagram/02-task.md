@@ -19,4 +19,10 @@ diagram**:
 
 ## How it is graded
 
-Every time you save, the diagram is rendered to `main.png` (opened automatically the first time). Your diagram is scored by **keywords**: each entry in the solution's `keywords` list is matched against your diagram as a case-insensitive regular expression. Keywords which are not valid regex are matched via substring search. Reach the pass threshold to complete the exercise.
+Every time you save, the diagram is rendered to `main.png` (opened automatically the first time). Your diagram is scored by **keywords**: each entry in the solution's `keywords` list is matched against your diagram (case-insensitively). A keyword selects how it is matched by its wrapper:
+
+- `s/PATTERN/` — `PATTERN` is a regular expression.
+- `w/TEXT/` — substring search for `TEXT` with all spaces and tabs ignored, so `login(user, pass)` also matches `login ( user,pass )`.
+- anything else — plain substring search, matched verbatim.
+
+Reach the pass threshold to complete the exercise.

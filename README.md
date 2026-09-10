@@ -254,7 +254,7 @@ lq
 
 | Key         | Action                                 |
 |-------------|----------------------------------------|
-| `↑` / `↓`   | Navigate the exercise list             |
+| `↑` / `↓` | Navigate the exercise list             |
 | `Enter`     | Open the selected exercise             |
 | `z`         | Collapse / expand all exercise folders |
 
@@ -262,8 +262,8 @@ lq
 
 | Key         | Action                                                       |
 |-------------|--------------------------------------------------------------|
-| `←` / `→`   | Jump between pages (Theory, Task, Debug, Output, Solution)   |
-| `↑` / `↓`   | Scroll text within the current page                          |
+| `←` / `→` | Jump between pages (Theory, Task, Debug, Output, Solution)   |
+| `↑` / `↓` | Scroll text within the current page                          |
 | `j` / `k`   | Jump to the previous / next exercise                         |
 | `e`         | Open the current exercise file in your editor                |
 | `E`         | Open the current exercise directory in your editor           |
@@ -282,9 +282,9 @@ lq
 
 | File | Contents | Format | Commit? |
 | --- | --- | --- | --- |
-| `lq.toml` | Toolchain commands (`rust.cmd`, `python.cmd`, …) | Plaintext TOML | Yes — shareable |
-| `.lq.progress` | Scores, pass state, hints, current exercise | **Encrypted**, identity-bound | Yes — see syncing below |
-| `.lq.attest` | Machine-bound proof of your last online identity check | **Encrypted** | **No — never commit** |
+| `lq.toml` | Toolchain commands (`rust.cmd`, `python.cmd`, …) | Plaintext TOML | Yes - shareable |
+| `.lq.progress` | Scores, pass state, hints, current exercise | **Encrypted**, identity-bound | Yes - see syncing below |
+| `.lq.attest` | Machine-bound proof of your last online identity check | **Encrypted** | **No - never commit** |
 
 `lq.toml` is the only hand-editable file; it holds no progress and is safe to
 customise:
@@ -310,19 +310,11 @@ bin = "/usr/local/bin/zed"          # your editor; auto-detected on first run
 cmd = "<ide> <file>"
 ```
 
-The **`e`** shortcut opens the current exercise's source file in the editor
-configured under `[ide]` (and PlantUML previews open there too). `ide.bin`,
-`ripes.bin`, and `plantuml.bin` are auto-populated with a platform-appropriate
-default the first time `lq` runs — Zed or VS Code for the IDE, the discovered
-Ripes app for RISC-V, and the `PLANTUML_JAR` environment variable for PlantUML
-— and can be edited to point elsewhere. When no IDE is found, `e` falls back to
-the OS default handler.
+The **`e`** shortcut opens the current exercise's source file in the editor configured under `[ide]` (and PlantUML previews open there too). `ide.bin`, `ripes.bin`, and `plantuml.bin` are auto-populated with a platform-appropriate default the first time `lq` runs - Zed or VS Code for the IDE, the discovered Ripes app for RISC-V, and the `PLANTUML_JAR` environment variable for PlantUML - and can be edited to point elsewhere. When no IDE is found, `e` falls back to the OS default handler.
 
 ### File watching
 
-`lq` uses file system events (e.g. inotify) to detect saves and automatically
-re-verify the exercises. Some environments like Docker containers on Windows
-do not send events to the langquest process.
+`lq` uses file system events (e.g. inotify) to detect saves and automatically re-verify the exercises. Some environments like Docker containers on Windows do not send events to the langquest process.
 Set the `POLLING_MS` environment variableto to enable a polling watcher instead:
 
 ```sh
@@ -338,32 +330,14 @@ Don't set it or set it to 0 to use the default, non-polling watcher instead.
 
 ### Progress, identity & syncing
 
-Progress lives in the encrypted `.lq.progress` file, not in `lq.toml`, so it
-**cannot be edited by hand** — tampering fails an integrity check and `lq`
-refuses to start. Progress is also **bound to your GitHub account** (via the
-`gh` CLI): it will not open under a different account, so a solved file cannot be
-shared between students.
+Progress lives in the encrypted `.lq.progress` file, not in `lq.toml`, so it **cannot be edited by hand** - tampering fails an integrity check and `lq` refuses to start. Progress is also **bound to your GitHub account** (via the `gh` CLI): it will not open under a different account, so a solved file cannot be shared between students.
 
-- **First launch requires internet** (and `gh auth login`) once, to bind your
-  progress to your GitHub identity.
-- **Offline afterwards works** via a machine-bound attestation cached on each
-  machine's first online launch (valid for 30 days).
+- **First launch requires internet** (and `gh auth login`) once, to bind your progress to your GitHub identity.
+- **Offline afterwards works** via a machine-bound attestation cached on each machine's first online launch (valid for 30 days).
 
-**For teachers — reading progress.** The read-only commands `lq -s` (stats) and
-`lq status` are **not** identity-gated: you can run them against any student's
-repository to inspect their progress. Both print the **bound owner**
-(`Owner: <login> (GitHub #<id>)`) decrypted from the tamper-proof file, so you
-can confirm the progress belongs to the expected student. Because the owner is
-sealed inside the encrypted blob, a student who copies a classmate's solved
-`.lq.progress` into their own repo will still show the *classmate's* owner — the
-swap is immediately visible. Doing exercises (the interactive TUI) remains bound
-to the student's own GitHub account, so a copied file cannot be continued as
-one's own.
+**For teachers - reading progress.** The read-only commands `lq -s` (stats) and `lq status` are **not** identity-gated: you can run them against any student's repository to inspect their progress. Both print the **bound owner** (`Owner: <login> (GitHub #<id>)`) decrypted from the tamper-proof file, so you can confirm the progress belongs to the expected student. Because the owner is sealed inside the encrypted blob, a student who copies a classmate's solved `.lq.progress` into their own repo will still show the *classmate's* owner - the swap is immediately visible. Doing exercises (the interactive TUI) remains bound to the student's own GitHub account, so a copied file cannot be continued as one's own.
 
-Running `lq -s` also writes a machine-readable **`results.toml`** at the repo
-root — the full evaluation in a form that is easy to script grading against. It
-contains the bound student identity, overall and per-module summaries, and a
-per-exercise record (`passed`, `best_score`, `solution_seen`, hint counts, …):
+Running `lq -s` also writes a machine-readable **`results.toml`** at the repo root - the full evaluation in a form that is easy to script grading against. It contains the bound student identity, overall and per-module summaries, and a per-exercise record (`passed`, `best_score`, `solution_seen`, hint counts, …):
 
 ```toml
 [meta]
@@ -379,7 +353,7 @@ github_id = 4242
 total_exercises = 9
 completed = 7
 tests_passed = 38     # unit tests passed across all exercises …
-tests_total = 45      # … out of this many — enables partial-credit grading
+tests_total = 45      # … out of this many - enables partial-credit grading
 solutions_seen = 0
 hints_shown = 0
 hints_explored = 0
@@ -413,12 +387,9 @@ hints_revealed = 0
 hints_total = 3
 ```
 
-The `tests_passed` / `tests_total` counts (also shown in the terminal `-s`
-output and per module) let you award partial credit for an "almost finished"
-exercise — a student who passes 3 of 4 unit tests still gets most of the points.
+The `tests_passed` / `tests_total` counts (also shown in the terminal `-s` output and per module) let you award partial credit for an "almost finished" exercise - a student who passes 3 of 4 unit tests still gets most of the points.
 
-`tests_total` is counted **statically** from the test source, so the total is
-known before an exercise is ever verified (it shows `0/N`, not `0/0`):
+`tests_total` is counted **statically** from the test source, so the total is known before an exercise is ever verified (it shows `0/N`, not `0/0`):
 
 | Language | Tests counted from |
 | --- | --- |
@@ -430,14 +401,9 @@ known before an exercise is ever verified (it shows `0/N`, not `0/0`):
 
 `tests_passed` is the number satisfied at the student's best verification.
 
-`results.toml` is a regenerable export (not read back by `lq`); the trust anchor
-remains the encrypted `.lq.progress`, so generate it yourself from each
-student's repo rather than trusting a committed copy.
+`results.toml` is a regenerable export (not read back by `lq`); the trust anchor remains the encrypted `.lq.progress`, so generate it yourself from each student's repo rather than trusting a committed copy.
 
-**Using multiple machines** (e.g. home PC + school laptop): because progress is
-bound to your GitHub *account* — not the machine — you can work on any machine
-signed into the same account. Since each student works in **their own fork**,
-the clean way to sync is to commit `.lq.progress`:
+**Using multiple machines** (e.g. home PC + school laptop): because progress is bound to your GitHub *account* - not the machine - you can work on any machine signed into the same account. Since each student works in **their own fork**, the clean way to sync is to commit `.lq.progress`:
 
 ```sh
 # End of a session
@@ -447,31 +413,22 @@ git pull
 ```
 
 Notes:
-- Add `.lq.attest` to your exercise repo's `.gitignore` — it is machine-specific
-  and each machine regenerates its own; never commit it.
+- Add `.lq.attest` to your exercise repo's `.gitignore` - it is machine-specific and each machine regenerates its own; never commit it.
 - `.lq.progress` is an encrypted binary blob, so git cannot *merge* two versions.
-  Always **pull before** a session and **push after** to avoid conflicts from
-  working on both machines at once.
-- Committing `.lq.progress` is safe even in a public fork: it is encrypted and
-  account-bound, so nobody can read your scores or reuse the file.
+  Always **pull before** a session and **push after** to avoid conflicts from working on both machines at once.
+- Committing `.lq.progress` is safe even in a public fork: it is encrypted and account-bound, so nobody can read your scores or reuse the file.
 
-See [`docs/exercise-repo.gitignore`](docs/exercise-repo.gitignore) for a ready
-`.gitignore` to drop into your exercise repository.
+See [`docs/exercise-repo.gitignore`](docs/exercise-repo.gitignore) for a ready `.gitignore` to drop into your exercise repository.
 
 ### Teacher vs student repos (encrypted solutions)
 
 Exercise repositories can be published in two tiers:
 
-- **Teacher repo** — the source of truth. `solution/solution.md` and
+- **Teacher repo** - the source of truth. `solution/solution.md` and
   `solution/main.*` are readable plaintext.
-- **Student repo** — a published copy where the contents of every `solution/`
-  directory are **encrypted**, so students cannot read solutions by opening the
-  files, browsing the repo on GitHub, or `grep`-ing the tree. They can still
-  reveal a solution *inside* LangQuest (which is tracked as `solution_seen`).
+- **Student repo** - a published copy where the contents of every `solution/` directory are **encrypted**, so students cannot read solutions by opening the files, browsing the repo on GitHub, or `grep`-ing the tree. They can still reveal a solution *inside* LangQuest (which is tracked as `solution_seen`).
 
-LangQuest reads **either** form transparently — a sealed file is detected by its
-magic header and decrypted at load time — so the same binary works against both
-repos with no configuration.
+LangQuest reads **either** form transparently - a sealed file is detected by its magic header and decrypted at load time - so the same binary works against both repos with no configuration.
 
 Seal a repository in place with:
 
@@ -479,22 +436,13 @@ Seal a repository in place with:
 lq seal-solutions --repo /path/to/repo   # encrypt every solution/ file (idempotent)
 ```
 
-Only files under a `solution/` directory are affected; student working files,
-`02-task.md`, and `01-theory.md` are left untouched.
+Only files under a `solution/` directory are affected; student working files, `02-task.md`, and `01-theory.md` are left untouched.
 
-There is deliberately **no** `unseal` command in `lq` — otherwise a student could
-bulk-decrypt every solution from their sealed repo. The teacher's private repo
-holds the plaintext solutions and is the source of truth.
+There is deliberately **no** `unseal` command in `lq` - otherwise a student could bulk-decrypt every solution from their sealed repo. The teacher's private repo holds the plaintext solutions and is the source of truth.
 
-**Automating it.** Keep the teacher repo private and let CI publish the sealed
-student repo on every push. A ready-to-adapt GitHub Actions workflow is provided
-in [`docs/publish-student-repo.yml`](docs/publish-student-repo.yml): it installs
-`lq`, runs `lq seal-solutions`, and pushes the sealed tree to a separate student
-repository.
+**Automating it.** Keep the teacher repo private and let CI publish the sealed student repo on every push. A ready-to-adapt GitHub Actions workflow is provided in [`docs/publish-student-repo.yml`](docs/publish-student-repo.yml): it installs `lq`, runs `lq seal-solutions`, and pushes the sealed tree to a separate student repository.
 
-> As with progress encryption, the sealing key is embedded in the `lq` binary,
-> so this prevents casual reading of solutions rather than defeating a determined
-> reverse-engineer.
+> As with progress encryption, the sealing key is embedded in the `lq` binary, so this prevents casual reading of solutions rather than defeating a determined reverse-engineer.
 
 ## Creating Your Own Exercises
 
@@ -662,7 +610,7 @@ def test_add_negative():
 
 ```
 
-> **Note:** The `<!-- Write your answer below -->` marker line is **mandatory** for text exercises. Keywords are only searched in the content that appears after this marker, so students can read the question without accidentally matching keywords in it. Keywords are matched as case-insensitive regular expressions. A keyword that is not valid regex falls back to substring matching.
+> **Note:** The `<!-- Write your answer below -->` marker line is **mandatory** for text exercises. Keywords are only searched in the content that appears after this marker, so students can read the question without accidentally matching keywords in it. Each keyword selects its matching mode by its wrapper (see [Keyword matching](#keyword-matching) below).
 
 **PlantUML** (`main.puml`) - Diagrams graded by keyword/regex matching against the `keywords` in `solution/solution.md`. The reference diagram in `solution/main.puml` is also required as it's used as the reference solution
 
@@ -672,7 +620,7 @@ def test_add_negative():
 @enduml
 ```
 
-On save the diagram is rendered to `main.png`. It is opened once in the configured `[ide]` (or the OS default image viewer if none is found); later saves re-render the file in place, which the editor auto-reloads, so no duplicate tabs are opened. Rendering requires Oracle Java JDK 21 on PATH and the `PLANTUML_JAR` environment variable pointing to `plantuml.jar`; set `plantuml.bin` in `lq.toml` to override the jar path. Grading uses the same keyword/regex matching as Markdown, searched over the whole diagram source.
+On save the diagram is rendered to `main.png`. It is opened once in the configured `[ide]` (or the OS default image viewer if none is found); later saves re-render the file in place, which the editor auto-reloads, so no duplicate tabs are opened. Rendering requires Oracle Java JDK 21 on PATH and the `PLANTUML_JAR` environment variable pointing to `plantuml.jar`; set `plantuml.bin` in `lq.toml` to override the jar path. Grading uses the same [keyword matching](#keyword-matching) as Markdown, searched over the whole diagram source (PlantUML comments are ignored).
 
 Get the latest PlantUML jar from [https://plantuml.com/download](https://plantuml.com/download) and set the environment variable or the `plantuml.bin` path in `lq.toml`:
 
@@ -720,21 +668,31 @@ keywords = ["mut", "let", "i32"]
 
 ## Explanation
 
-To add two numbers in Rust, simply use the `+` operator. The function
-returns the last expression automatically when there's no semicolon.
-
-The `keywords` array is used for Markdown and PlantUML exercises to score
-submissions by keyword/regex matching. Each keyword is first tried to be
-matched as a case-insensitive regular expression. If that fails, it falls
-back to an (also case-insensitive) substring search.
+To add two numbers in Rust, simply use the `+` operator. The function returns the last expression automatically when there's no semicolon.
 ```
 
 | Field | Description |
 |-------|-------------|
 | `title` | Display name for the solution |
 | `hints` | Ordered list revealed one at a time with `h` |
-| `keywords` | Regex patterns for scoring Markdown and PlantUML exercises |
+| `keywords` | Patterns for scoring Markdown and PlantUML exercises (see below) |
 | body | Prose explanation shown on the Solution page |
+
+### Keyword matching
+
+The `keywords` array scores Markdown and PlantUML submissions. Matching is always case-insensitive, and each keyword picks its mode from its wrapper:
+
+| Keyword form | Mode | Matches |
+|--------------|------|---------|
+| `s/PATTERN/` | **regex** | `PATTERN` as a regular expression |
+| `w/TEXT/` | **whitespace-insensitive literal** | `TEXT` as a substring, with **spaces and tabs ignored** on both sides |
+| `"TEXT"` (anything else) | **literal** | `TEXT` as a plain substring, verbatim |
+
+- `"welcome"` → matches the literal text `welcome`.
+- `s/[^-]->/` → regex: a request arrow `->` but not a reply arrow `-->`.
+- `w/login(user, pass)/` → matches `login(user, pass)`, `login ( user,pass )` and `login(user,pass)` alike - whitespace differences don't matter.
+
+> **TOML tip:** write regex keywords as **single-quoted** TOML strings (`'s/\d+/'`), not double-quoted. Single quotes are literal strings, so backslashes pass through unchanged; in double-quoted strings a `\d` or `\(` is an invalid escape and the exercise silently fails to load.
 
 ## CLI Reference
 
@@ -783,15 +741,10 @@ lq seal-solutions --repo /path/to/repo
 
 ### Grading mode
 
-`lq --grade` launches the TUI in **read-only** mode for grading a student's
-repository without having to sign in as the student.
-The flag is locked behind the `grading` cargo feature
-(`cargo build --release --features grading`).
-By default, student binaries without the `--grade` flag are built.
+`lq --grade` launches the TUI in **read-only** mode for grading a student's repository without having to sign in as the student.
+The flag is locked behind the `grading` cargo feature (`cargo build --release --features grading`). By default, student binaries without the `--grade` flag are built.
 
-Note: If one would like to script the grading process, use the 
-[`lq -s --repo`](#configuration--progress-files) command, as it exports
-the results as TOML.
+Note: If one would like to script the grading process, use the [`lq -s --repo`](#configuration--progress-files) command, as it exports the results as TOML.
 
 ## Dependencies
 

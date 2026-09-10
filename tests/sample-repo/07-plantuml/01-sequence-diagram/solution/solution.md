@@ -7,16 +7,20 @@ hints    = [
     "Order: login → POST /login → 200 OK → welcome.",
 ]
 keywords = [
+    "w/User -> Browser: login(user, pass)/",
+    's/User\s*->\s*Browser\s*:\s*login\s*\(\s*user\s*,\s*pass\s*\)/',
     "User",
     "Browser",
     "Server",
-    "[^-]->",
+    "s/[^-]->/",
     "-->",
     "POST /login",
     "200 OK",
     "welcome",
 ]
 ---
+
+
 
 ## Explanation
 
