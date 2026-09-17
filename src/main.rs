@@ -46,6 +46,8 @@ struct Cli {
 enum Command {
   /// Print current exercise and overall progress
   Status,
+  /// Check if every exercise in the repo parses correctly
+  Verify,
   /// Encrypt every `solution/` file in place (teacher → student repo, for CI)
   SealSolutions,
 }
@@ -71,6 +73,7 @@ fn main() -> Result<()> {
 
   match cli.command {
     Some(Command::Status) => handle_status(cli.repo),
+    Some(Command::Verify) => handle_verify(cli.repo),
     Some(Command::SealSolutions) => handle_seal_solutions(cli.repo),
     #[cfg(feature = "grading")]
     None => handle_default(cli.repo, cli.grade),
@@ -150,6 +153,28 @@ fn handle_reset(repo: Option<PathBuf>) -> Result<()> {
   cfg.save(&cfg_path)?;
 
   Ok(())
+}
+
+/// Handle the `verify` subcommand: run exercise discovery over the repo and
+/// report every exercise that failed to load.
+/// Exits with a non-zero status if any exercise failed to parse.
+fn handle_verify(repo: Option<PathBuf>) -> Result<()> {
+  let repo_path = config::resolve_repo_path(repo.as_deref());
+  let (_tree, all_exercises, errors) = exercise::discover_exercises(&repo_path);
+
+  println!("Exercises loaded: {}", all_exercises.len());
+
+  if errors.is_empty() {
+    println!("All exercises parse correctly.");
+    return Ok(());
+  }
+
+  println!("Failed exercises: {}", errors.len());
+  for (path, err) in &errors {
+    println!("  {}:", path.display());
+    println!("    {err}");
+  }
+  std::process::exit(1);
 }
 
 /// Handle the `status` subcommand.

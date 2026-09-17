@@ -696,6 +696,8 @@ The `keywords` array scores Markdown and PlantUML submissions. Matching is alway
 
 > **TOML tip:** write regex keywords as **single-quoted** TOML strings (`'s/\d+/'`), not double-quoted. Single quotes are literal strings, so backslashes pass through unchanged; in double-quoted strings a `\d` or `\(` is an invalid escape and the exercise silently fails to load.
 
+To catch anything that makes an exercise fail to load, run `lq verify`: it lists every faulty exercise with an appropriate error message.
+
 ## CLI Reference
 
 ```
@@ -705,6 +707,7 @@ Usage: lq [OPTIONS] [COMMAND]
 
 Commands:
   status          Print current exercise and overall progress
+  verify          Check that every exercise parses correctly
   seal-solutions  Encrypt every `solution/` file in place (teacher → student repo, for CI)
   help            Print this message or the help of the given subcommand(s)
 
@@ -736,6 +739,9 @@ lq --keys
 
 # Reset all progress (prompts for confirmation)
 lq --reset
+
+# Check if every exercise in a repository parses correctly
+lq verify --repo /path/to/repo
 
 # Seal all solution/ files for the student distribution (see CI workflow in docs/)
 lq seal-solutions --repo /path/to/repo
