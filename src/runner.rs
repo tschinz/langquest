@@ -247,6 +247,22 @@ fn parse_rust_cmd(label: &str, cmd: &str, sub: impl Fn(&str) -> String) -> Resul
   Ok((binary, args))
 }
 
+/// Extract human-readable compiler messages from a cargo test compilation.
+///
+/// Due to rust.cmd_cargo using `--mesage-format=json`, which is required for
+/// locating the resulting test binary, json is normally returned. Here we extract
+/// the human-readable messages from the Cargo output.
+fn readable_cargo_output(output: &std::process::Output) -> String {
+  let rendered: Vec<String> = String::from_utf8_lossy(&output.stdout)
+    .lines()
+    .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+    .filter_map(|j| j.get("message").and_then(|m| m.get("rendered")).and_then(|r| r.as_str()).map(String::from))
+    .filter(|s| !s.trim().is_empty())
+    .collect();
+
+  if rendered.is_empty() { combined_output(output) } else { rendered.join("\n") }
+}
+
 fn build_rust_cargo(cfg: &RustConfig) -> Result<(PathBuf, Vec<String>), String> {
   parse_rust_cmd("cmd_cargo", &cfg.cmd_cargo, |t| t.to_string())
 }
@@ -295,7 +311,11 @@ fn verify_rust(exercise: &Exercise, rust_cfg: &RustConfig, cancel: &VerifyCancel
   };
 
   if !compile.status.success() {
-    let out = combined_output(&compile);
+    let out = if is_cargo {
+      readable_cargo_output(&compile)
+    } else {
+      combined_output(&compile)
+    };
     return VerificationResult::zero(cap_output(&out, MAX_OUTPUT_LINES), threshold);
   }
 
