@@ -1,0 +1,6 @@
+[build.env]
+passthrough = [
+    "ATTEST_KEY",
+    "PROGRESS_KEY",
+    "SOLUTION_KEY",
+]
