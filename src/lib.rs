@@ -16,3 +16,4 @@ pub mod runner;
 pub mod solutions;
 pub mod stats;
 pub mod ui;
+pub mod update;

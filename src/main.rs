@@ -231,6 +231,10 @@ fn handle_default(repo: Option<PathBuf>, grade_mode: bool) -> Result<()> {
     eprintln!("   Grade mode: progress is read-only.");
   }
 
+  if lq::update::check_and_prompt() {
+    return Ok(());
+  }
+
   // Print the config location and tool-resolution report FIRST, before the
   // heavier work (identity binding + exercise discovery), so it stays on screen
   // long enough to read.
