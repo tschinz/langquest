@@ -35,7 +35,7 @@ pub struct ExerciseState {
   /// the second is the total number of hints for this exercise.
   #[serde(default, skip_serializing_if = "String::is_empty")]
   pub hints_max: String,
-  /// Amount of times the student save the file and a regrading occured.
+  /// Amount of times the student save the file and a regrading occurred.
   #[serde(default)]
   pub times_saved: u32,
   /// Total number of unit tests / checks in this exercise, from the most recent

@@ -3,7 +3,7 @@ title    = "Meet Cargo"
 hints    = [
     "Look at the **Debug** page: Cargo fails before the compiler even runs.",
     "Two things are broken in `Cargo.toml`: the `edition` must be a real one and the `path` in `[[bin]]` must point at the file that actually contains the code.",
-    "```toml\n[package]\nname = \"excercise\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[[bin]]\nname = \"excercise\"\npath = \"main.rs\"\n```",
+    "```toml\n[package]\nname = \"exercise\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[[bin]]\nname = \"exercise\"\npath = \"main.rs\"\n```",
 ]
 keywords = ["Cargo", "build"]
 ---

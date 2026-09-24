@@ -14,7 +14,7 @@ All notable changes to this project will be documented in this file.
 - *(save-counter)* Add save-counter feature ([1e34a87](https://github.com/tschinz/lq/commit/1e34a87d8b7d6451bc918877393adac6d5af02cd) - mel-64)
 - *(rust-project)* Autocreate .rust-project on rust exercise entry ([1417242](https://github.com/tschinz/lq/commit/141724267f4896e514d6528b96da61f9f5d2b719) - mel-64)
 - *(cli)* Add -r shorthand flag ([ef28458](https://github.com/tschinz/lq/commit/ef28458c17683efcf869623942d9aa13481c6352) - mel-64)
-- *(plantuml)* Remove plantuml.jar from the assests. It's up to the users to install plantuml and provide the path through env variable ([759aff1](https://github.com/tschinz/lq/commit/759aff12aaf4a6aec6c5bf124e32338c89c5f966) - Borgeat Rémy)
+- *(plantuml)* Remove plantuml.jar from the assets. It's up to the users to install plantuml and provide the path through env variable ([759aff1](https://github.com/tschinz/lq/commit/759aff12aaf4a6aec6c5bf124e32338c89c5f966) - Borgeat Rémy)
 - *(just)* Add plantuml toolchain installation in the just setup recipe ([7f1fe82](https://github.com/tschinz/lq/commit/7f1fe82aa49b163e7130ff9ec3d81fb9abe0e1d0) - zas)
 - *(tooolchain)* Check toolchain setup at startup. ([71f09f5](https://github.com/tschinz/lq/commit/71f09f5deb3abc8659ae460f295c1a1159153c34) - zas)
 - *(grading)* Add grading flag which does not validate identity nor write to progress file ([d757cae](https://github.com/tschinz/lq/commit/d757caeb4b30b32239867c42cc6fb5250f4a5d35) - mel-64)
@@ -23,7 +23,7 @@ All notable changes to this project will be documented in this file.
 - *(rust/cargo)* Add cargo compatibility ([68cac5e](https://github.com/tschinz/lq/commit/68cac5ec423a9ea13eea7a377073f2180e334395) - mel-64)
 - *(lq.toml)* Use defaults if not set ([4d7b671](https://github.com/tschinz/lq/commit/4d7b671df737642c95773e51f4a53434daa6701b) - mel-64)
 - *(plantuml)* [**breaking**] Add plantuml regex grading ([f1a10e5](https://github.com/tschinz/lq/commit/f1a10e5ee2ef3b4b0a2925178505f875dbbd62ea) - mel-64)
-- *(plantuml)* Match reges literals and whitepace ignores literals ([4882b4f](https://github.com/tschinz/lq/commit/4882b4fde69222214c7026f98bd5b1e463dd680f) - zas)
+- *(plantuml)* Match reges literals and whitespace ignores literals ([4882b4f](https://github.com/tschinz/lq/commit/4882b4fde69222214c7026f98bd5b1e463dd680f) - zas)
 - Allow overwriting the source file in 02-task.md ([dd197db](https://github.com/tschinz/lq/commit/dd197db9becb80741aa479290cf550c386039929) - mel-64)
 
 ### 🐛 Bug Fixes
@@ -109,11 +109,11 @@ chore(ci): update workflow tags ([2e044c0](https://github.com/tschinz/lq/commit/
 - *(app)* Add basic app functionalities ([149a0a2](https://github.com/tschinz/lq/commit/149a0a2e57807e08e378d5a1b738f9c77cee6e86) - zas)
 - *(ui)* Add ratatui ui ([7035c73](https://github.com/tschinz/lq/commit/7035c7369cdbf58b5ea76a3a6cc5c97cf73a48ca) - zas)
 - *(cache)* Add caching, small statusbar changes ([6688c6d](https://github.com/tschinz/lq/commit/6688c6dc67d04b4f0e595437f8a2a8803cc50e4a) - zas)
-- *(scoll)* Add content_height and viewport_height ([e9ebfd2](https://github.com/tschinz/lq/commit/e9ebfd28f165e1ba12fd4ee972827c7cc0134196) - zas)
+- *(scroll)* Add content_height and viewport_height ([e9ebfd2](https://github.com/tschinz/lq/commit/e9ebfd28f165e1ba12fd4ee972827c7cc0134196) - zas)
 - *(cpp)* Support c++ as langunages through catch2 with hello world example ([7b7134c](https://github.com/tschinz/lq/commit/7b7134c3c2ed4b3a14270cdcdb24d28cd444df65) - zas)
-- *(debug)* Print the main logs under the debug pannel ([3acf946](https://github.com/tschinz/lq/commit/3acf946cc60b9d7bd0dadbd2db3a116a61f9dbaa) - Borgeat Rémy)
-- *(modules)* Search exercices recursively ([497c4b9](https://github.com/tschinz/lq/commit/497c4b918d69bc0c446e9e2c709ca8a4e33e413c) - Borgeat Rémy)
-- *(exercices)* Add exercices in subfolders ([186b527](https://github.com/tschinz/lq/commit/186b5276fea44b5331616160f886f69af3241d3e) - Borgeat Rémy)
+- *(debug)* Print the main logs under the debug panel ([3acf946](https://github.com/tschinz/lq/commit/3acf946cc60b9d7bd0dadbd2db3a116a61f9dbaa) - Borgeat Rémy)
+- *(modules)* Search exercises recursively ([497c4b9](https://github.com/tschinz/lq/commit/497c4b918d69bc0c446e9e2c709ca8a4e33e413c) - Borgeat Rémy)
+- *(exercises)* Add exercises in subfolders ([186b527](https://github.com/tschinz/lq/commit/186b5276fea44b5331616160f886f69af3241d3e) - Borgeat Rémy)
 - Register map declared only once ([f6c783e](https://github.com/tschinz/lq/commit/f6c783e77a15c6a7c0a6d1055e08be48b0b84b8a) - Axam)
 - Add(table) : Support markdown table. The markdown tables are now
 rendered in the terminal ([5900be4](https://github.com/tschinz/lq/commit/5900be4a23e80ed357f9c7ca1fa3864d78eaad01) - Borgeat Rémy)
@@ -129,8 +129,8 @@ tabulation is automatically added. ([e36d369](https://github.com/tschinz/lq/comm
 - *(riscv)* Cycles count in ripes output printed to run results ([0ff8244](https://github.com/tschinz/lq/commit/0ff82447655b35275a7f413af543fb8b4683e2c8) - axel.amand)
 - *(riscv)* Output cycles not found if missing from ripes output ([de20a0f](https://github.com/tschinz/lq/commit/de20a0fe1a442758719b4e54d12fc7a1750a8dc8) - axel.amand)
 - *(riscv)* M extension activated by default ([cdb78c1](https://github.com/tschinz/lq/commit/cdb78c1b299396ed7cf9877b86fc89145ba53d54) - axel.amand)
-- *(progressbar)* Refactor progress bar to display exercices status ([9d0f936](https://github.com/tschinz/lq/commit/9d0f936a4631792879bb28ff9aa4d8d2aa5ef5a0) - Borgeat Rémy)
-- *(editor)* Window now open files in deault editor ([409e35c](https://github.com/tschinz/lq/commit/409e35ce66432bdb00dd5d90c97592e105139ce2) - Axam)
+- *(progressbar)* Refactor progress bar to display exercises status ([9d0f936](https://github.com/tschinz/lq/commit/9d0f936a4631792879bb28ff9aa4d8d2aa5ef5a0) - Borgeat Rémy)
+- *(editor)* Window now open files in default editor ([409e35c](https://github.com/tschinz/lq/commit/409e35ce66432bdb00dd5d90c97592e105139ce2) - Axam)
 - Feat(stats): Add number of hints shown and the max hint show in the
 config.toml ([d74d09c](https://github.com/tschinz/lq/commit/d74d09c4d922e0d0fedeec8fa8bce66e9bb1ddd1) - Borgeat Rémy)
 - *(stats)* Add a statistics command ([13fb31e](https://github.com/tschinz/lq/commit/13fb31e33052b26710ec3b5feed2c2ff1144ea0a) - Borgeat Rémy)
@@ -164,7 +164,7 @@ config.toml ([d74d09c](https://github.com/tschinz/lq/commit/d74d09c4d922e0d0fede
 - *(tui)* Windows compatibility ([81ef85c](https://github.com/tschinz/lq/commit/81ef85c4b310a0f9e09a212bc34a400737c483db) - zas)
 - Fix(just) shell settings ([f13546f](https://github.com/tschinz/lq/commit/f13546ff50f16fa4fa051bdfa172b4b8ad33b57c) - zas)
 - Fix(ui) : Fix laggy UI on Windows ([9da40f1](https://github.com/tschinz/lq/commit/9da40f1eac3519b3a6d4b84c695bf2cff3b142c8) - Borgeat Rémy)
-- Fix(ci) : Fix clippy and failling test ([e58447a](https://github.com/tschinz/lq/commit/e58447aa2fb93240bdae870fd00ed19939c92773) - Borgeat Rémy)
+- Fix(ci) : Fix clippy and failing test ([e58447a](https://github.com/tschinz/lq/commit/e58447aa2fb93240bdae870fd00ed19939c92773) - Borgeat Rémy)
 - Fix(ci) : Fix rustfmt issues ([6a1815d](https://github.com/tschinz/lq/commit/6a1815d83912a64bbdab2f27294be9e5bb3bb938) - Borgeat Rémy)
 - ABI expected regs transformed to xNN variants to match Ripes log output ([cb6c766](https://github.com/tschinz/lq/commit/cb6c766fba9658eb74f5fe80411eacb3b72f1c63) - Axam)
 - Rustfmt ([e338022](https://github.com/tschinz/lq/commit/e3380228009fd3fa6bfb4fdb64dca62a26de83e0) - Axam)
@@ -189,7 +189,7 @@ config.toml ([d74d09c](https://github.com/tschinz/lq/commit/d74d09c4d922e0d0fede
 - Readme code block ([3b75e0c](https://github.com/tschinz/lq/commit/3b75e0c3ad3695dcbb0f3d5d5a33c370985062b3) - zas)
 - *(overview)* Don't reset overview cursor position ([c769943](https://github.com/tschinz/lq/commit/c76994320d8dc1f62cd7c0b0aebfe26a4794fbd4) - mel-64)
 - *(status)* Bail out if no exercise can be found in repo directory ([8e28f57](https://github.com/tschinz/lq/commit/8e28f57d9ac08e112025a1200506af095149509e) - mel-64)
-- Fix excercise watcher not working reliably with certain editors on linux ([c92647f](https://github.com/tschinz/lq/commit/c92647f15d187338e628097c6982fc63f879a958) - mel-64)
+- Fix exercise watcher not working reliably with certain editors on linux ([c92647f](https://github.com/tschinz/lq/commit/c92647f15d187338e628097c6982fc63f879a958) - mel-64)
 
 ### 💼 Other
 
@@ -203,13 +203,13 @@ Fix: Ripes parsing for ABI names ([1c77321](https://github.com/tschinz/lq/commit
 - Riscv example to expect ABI names ([bb1213a](https://github.com/tschinz/lq/commit/bb1213aef4e77ac21646ded693be9ac5573fdd46) - Axam)
 - Merge pull request #4 from tschinz/feat/progressBarV2
 
-feat(progressbar): Refactor progress bar to display exercices status ([343c462](https://github.com/tschinz/lq/commit/343c462da1144a9f7206e4fb2f9979f3279e3da1) - BorgeatRemy)
+feat(progressbar): Refactor progress bar to display exercises status ([343c462](https://github.com/tschinz/lq/commit/343c462da1144a9f7206e4fb2f9979f3279e3da1) - BorgeatRemy)
 - Merge branch 'main' of https://github.com/tschinz/langquest ([ed4bcec](https://github.com/tschinz/lq/commit/ed4bcecdfab114577ba263dcb6005fdd67ab95f7) - Borgeat Rémy)
 - Merge remote-tracking branch 'origin/test/deferred_verify' ([36e7947](https://github.com/tschinz/lq/commit/36e79471ead6b16d7f03adc19c9b8b50feb63b53) - zas)
 
 ### 🚜 Refactoring
 
-- *(md)* Remove custon syntax highlighting and its config ([fe5b7c1](https://github.com/tschinz/lq/commit/fe5b7c181e0d90db9869111af7fcd3b40e912737) - zas)
+- *(md)* Remove custom syntax highlighting and its config ([fe5b7c1](https://github.com/tschinz/lq/commit/fe5b7c181e0d90db9869111af7fcd3b40e912737) - zas)
 - *(status)* -s —stats and status is now the same ([246b060](https://github.com/tschinz/lq/commit/246b060f78e3bf3959c13dc474738ffc685a9218) - zas)
 - *(ci)* Default vars taken from .env.example instead ([2630d1b](https://github.com/tschinz/lq/commit/2630d1b5e8880d60fe7a533bad8ce6b2db638198) - axel.amand)
 
@@ -232,7 +232,7 @@ feat(progressbar): Refactor progress bar to display exercices status ([343c462](
 - *(fmt)* Apply rustfmt settings ([c0d6212](https://github.com/tschinz/lq/commit/c0d6212444d38c4898608a4dceeafea964a65424) - zas)
 - *(demo)* Add demo gif ([b0043a7](https://github.com/tschinz/lq/commit/b0043a79578036f2e6b7cf0286949af042ee89e8) - zas)
 - *(readme)* Minor fixes ([8407b10](https://github.com/tschinz/lq/commit/8407b10e81f968e352ebd278417adbf97e7c8135) - zas)
-- *(python)* Remove unnecesary lines ([5b57255](https://github.com/tschinz/lq/commit/5b5725528f3fc56ec0cc428f172aa40bb02b6e66) - zas)
+- *(python)* Remove unnecessary lines ([5b57255](https://github.com/tschinz/lq/commit/5b5725528f3fc56ec0cc428f172aa40bb02b6e66) - zas)
 - Clippy and fmt ([f217c04](https://github.com/tschinz/lq/commit/f217c04dd918b4614ca563ebb2151c5a3ce02e90) - zas)
 - *(fmt)* Fix rustfmt ([681c803](https://github.com/tschinz/lq/commit/681c803a08f927b06f9f459b12d78324330e88c9) - zas)
 - *(python)* Fix ruff message ([3aad522](https://github.com/tschinz/lq/commit/3aad522a0000e948b674ede70f1d7fd1febc29fc) - zas)

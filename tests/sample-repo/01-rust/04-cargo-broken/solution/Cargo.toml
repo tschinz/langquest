@@ -1,8 +1,8 @@
 [package]
-name = "excercise"
+name = "exercise"
 version = "0.1.0"
 edition = "2024"
 
 [[bin]]
-name = "excercise"
+name = "exercise"
 path = "main.rs"

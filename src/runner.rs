@@ -2574,7 +2574,7 @@ addi s2, s0, 1
   #[test]
   #[cfg(unix)]
   fn run_command_cancellable_drains_large_output() {
-    // Make sure that the pipe buffer is correctly continuesly read
+    // Make sure that the pipe buffer is correctly continuously read
     let cancel = VerifyCancel::new(Arc::new(AtomicU64::new(0)), 0);
     let mut cmd = Command::new("sh");
     cmd.args(["-c", "for i in $(seq 1 100000); do echo \"line-$i-awawawawawawawawa123456789\"; done"]);

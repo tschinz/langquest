@@ -640,7 +640,7 @@ doc-build:
     cargo doc --no-deps --document-private-items
     @echo "✓ Documentation generated at target/doc/{{ crate_name }}/index.html"
 
-# Generate SBOM for Dependecy Track
+# Generate SBOM for Dependency Track
 sbom:
     cargo sbom --output-format cyclone_dx_json_1_6 >> target/sbom-cyclone_dx_1_6.json
 

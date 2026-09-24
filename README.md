@@ -271,9 +271,9 @@ lq
 | `o`         | Go back to the Overview page                                 |
 
 - Arrow keys: scroll up/down, switch tabs
-- `j`/`k`: switch to previous / next excercise
-- `e`: open excercise file in editor
-- `E`: open excercise directory in editor
+- `j`/`k`: switch to previous / next exercise
+- `e`: open exercise file in editor
+- `E`: open exercise directory in editor
 
 
 ### Configuration & progress files

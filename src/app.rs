@@ -124,7 +124,7 @@ pub struct App {
   pub page: ExercisePage,
   /// Number of hints revealed so far for the current exercise.
   pub hints_revealed: usize,
-  /// How many times the student saved this excercise.
+  /// How many times the student saved this exercise.
   pub times_saved: u32,
   /// Most recent verification result.
   pub last_result: Option<VerificationResult>,
@@ -323,7 +323,7 @@ impl App {
   /// Create the .rust-project.json file.
   /// if this fails, we don't really care because it's not important right now plus there's very
   /// little that can actually, realistically fail.
-  /// Excercises with a cargo.toml are skipped.
+  /// Exercises with a cargo.toml are skipped.
   fn maybe_create_rust_project_json(&self) {
     let exercise = self.current_exercise();
     if exercise.language != Language::Rust {

@@ -23,12 +23,12 @@ This is the typical rust project structure, you can also change it to a certain 
 
 ```toml
 [package]              # a section: describes the project itself
-name = "excercise"     # its name
+name = "exercise"     # its name
 version = "0.1.0"      # its version (most often in sem-ver)
 edition = "2021"       # which 'version-family' to used
 
 [[bin]]                # a section: one executable
-name = "excercise"     # the name of the produced program
+name = "exercise"     # the name of the produced program
 path = "src/main.rs"       # which file the entrypoint to the source code is in
 ```
 

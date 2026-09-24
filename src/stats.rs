@@ -145,7 +145,7 @@ struct ExerciseResult {
   solution_seen: bool,
   /// Cumulative hint presses recorded for this exercise.
   hints_shown: usize,
-  /// How many times the user saved the excercise.
+  /// How many times the user saved the exercise.
   times_saved: u32,
   /// Furthest hint level reached.
   hints_revealed: usize,
