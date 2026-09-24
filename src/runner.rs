@@ -407,7 +407,7 @@ fn parse_rust_output(out_clean: &str, out_dirty: &str, threshold: f64) -> Verifi
       return VerificationResult::zero(format!("Internal regex error: {e}"), threshold);
     }
   };
-  let total_re = match regex::Regex::new(r"running (\d+) tests") {
+  let total_re = match regex::Regex::new(r"running (\d+) tests?") {
     Ok(r) => r,
     Err(e) => {
       return VerificationResult::zero(format!("Internal regex error: {e}"), threshold);
