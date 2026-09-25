@@ -2,6 +2,45 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.3] - 2026-09-25
+
+### 💼 Other
+
+- Only prepend CHANGELOG.md ([d099aeb](https://github.com/tschinz/lq/commit/d099aeb04c58dfa252f18331401f47b02d0820a4) - mel-64)
+
+### ⚙️ Miscellaneous Tasks
+
+- *(spelling)* Correct spelling with codespelling-tool ([30776b4](https://github.com/tschinz/lq/commit/30776b4625b0f35991b9eb10d10ddfe3321661c2) - mel-64)
+
+
+**Full Changelog**: [v0.2.3...0.2.3](https://github.com/tschinz/lq/compare/v0.2.3...0.2.3)
+
+## [0.2.2] - 2026-09-25
+
+### 💼 Other
+
+- Only prepend CHANGELOG.md ([d099aeb](https://github.com/tschinz/lq/commit/d099aeb04c58dfa252f18331401f47b02d0820a4) - mel-64)
+
+### ⚙️ Miscellaneous Tasks
+
+- *(spelling)* Correct spelling with codespelling-tool ([30776b4](https://github.com/tschinz/lq/commit/30776b4625b0f35991b9eb10d10ddfe3321661c2) - mel-64)
+
+
+**Full Changelog**: [v0.2.3...0.2.2](https://github.com/tschinz/lq/compare/v0.2.3...0.2.2)
+
+## [0.2.1] - 2026-09-25
+
+### 💼 Other
+
+- Only prepend CHANGELOG.md ([d099aeb](https://github.com/tschinz/lq/commit/d099aeb04c58dfa252f18331401f47b02d0820a4) - mel-64)
+
+### ⚙️ Miscellaneous Tasks
+
+- *(spelling)* Correct spelling with codespelling-tool ([30776b4](https://github.com/tschinz/lq/commit/30776b4625b0f35991b9eb10d10ddfe3321661c2) - mel-64)
+
+
+**Full Changelog**: [v0.2.3...0.2.1](https://github.com/tschinz/lq/compare/v0.2.3...0.2.1)
+
 ## [0.2.0] - 2026-09-10
 
 ### 🚀 Features
@@ -242,6 +281,3 @@ feat(progressbar): Refactor progress bar to display exercises status ([343c462](
 - *(ignore)* Ignore sample-test progress file ([64ad8c0](https://github.com/tschinz/lq/commit/64ad8c0575f3f6e723412296db0c67f93fbee400) - zas)
 - *(release)* Bump version to 1.0.0 and update packages ([bcf3336](https://github.com/tschinz/lq/commit/bcf33368d4daa1e0d50c62d72023b5d2e8b29905) - zas)
 - *(release)* Fix cargo and doc warnings ([883b23f](https://github.com/tschinz/lq/commit/883b23f374eab96cce804fbd5bfd293d5cffa8fa) - zas)
-
-
-
