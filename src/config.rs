@@ -575,12 +575,26 @@ impl ProjectConfig {
 /// Resolve the repository root path.
 ///
 /// If `cli_repo` is `Some`, the provided path is canonicalized and returned.
-/// Otherwise the current working directory is returned.
-pub fn resolve_repo_path(cli_repo: Option<&Path>) -> PathBuf {
+/// Otherwise the current working directory is used. If it doesn't contain
+/// `lq.toml`, parent directories are walked up until one is found.
+/// Returns an error if none is found.
+pub fn resolve_repo_path(cli_repo: Option<&Path>) -> anyhow::Result<PathBuf> {
   match cli_repo {
-    Some(p) => p.canonicalize().unwrap_or_else(|_| p.to_path_buf()),
-    None => std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+    Some(p) => Ok(p.canonicalize().unwrap_or_else(|_| p.to_path_buf())),
+    None => {
+      let cwd = std::env::current_dir()?;
+      find_repo_root(&cwd).ok_or_else(|| anyhow::anyhow!("repository root not found: no lq.toml in {} or any parent", cwd.display()))
+    }
   }
+}
+
+/// Search `start` and its ancestors for a directory containing `lq.toml`.
+pub fn find_repo_root(start: &Path) -> Option<PathBuf> {
+  std::fs::canonicalize(start)
+    .ok()?
+    .ancestors()
+    .find(|dir| dir.join("lq.toml").exists())
+    .map(Path::to_path_buf)
 }
 
 /// Return the path to the `lq.toml` config file within the given repo root.
@@ -856,18 +870,35 @@ mod tests {
   }
 
   #[test]
-  fn resolve_repo_path_with_none_returns_cwd() {
-    let result = resolve_repo_path(None);
-    // Should return something (cwd or fallback), not panic
-    assert!(!result.as_os_str().is_empty());
-  }
-
-  #[test]
   fn resolve_repo_path_with_some() {
     let dir = std::env::temp_dir();
     let result = resolve_repo_path(Some(&dir));
     // Canonicalized temp dir should exist
-    assert!(result.exists());
+    assert!(result.expect("repo path").exists());
+  }
+
+  #[test]
+  fn find_repo_root_walks_upwards() {
+    let root = std::env::temp_dir().join("lq_test_find_root");
+    // Clear stale leftovers from a previously failed run.
+    let _ = fs::remove_dir_all(&root);
+    let nested = root.join("a").join("b");
+    fs::create_dir_all(&nested).expect("create dirs");
+    fs::File::create(root.join("lq.toml")).expect("create lq.toml");
+
+    let found = find_repo_root(&nested).expect("root found");
+    assert_eq!(found, fs::canonicalize(&root).expect("canonicalize"));
+
+    let _ = fs::remove_dir_all(&root);
+  }
+
+  #[test]
+  fn find_repo_root_returns_none_without_marker() {
+    let dir = std::env::temp_dir().join("lq_test_find_root_none");
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).expect("create dir");
+    assert!(find_repo_root(&dir).is_none());
+    let _ = fs::remove_dir_all(&dir);
   }
 
   #[test]
