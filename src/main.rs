@@ -1,10 +1,11 @@
 #![deny(clippy::all)]
 
-use std::io::{BufRead, Write};
+use std::io::Write;
 use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use lq::utils::Question;
 use lq::{app, config, exercise, stats};
 use sha2::{Digest, Sha256};
 
@@ -117,7 +118,7 @@ fn handle_keys() -> Result<()> {
 /// (students must not be able to bulk-decrypt solutions); the teacher's source
 /// repo is the plaintext of record.
 fn handle_seal_solutions(repo: Option<PathBuf>) -> Result<()> {
-  let repo_path = config::resolve_repo_path(repo.as_deref());
+  let repo_path = config::resolve_repo_path(repo.as_deref())?;
   let count = lq::solutions::seal_solutions_in(&repo_path)?;
   println!("Sealed {count} solution file(s) in {}", repo_path.display());
   Ok(())
@@ -125,16 +126,15 @@ fn handle_seal_solutions(repo: Option<PathBuf>) -> Result<()> {
 
 /// Handle the `--reset` flag: wipe all progress after user confirmation.
 fn handle_reset(repo: Option<PathBuf>) -> Result<()> {
-  let repo_path = config::resolve_repo_path(repo.as_deref());
+  let repo_path = config::resolve_repo_path(repo.as_deref())?;
 
   println!("[!] This will delete all progress in lq.toml. This cannot be undone.");
-  print!("    Type \"yes\" to confirm, or anything else to cancel: ");
-  std::io::stdout().flush()?;
 
-  let mut input = String::new();
-  std::io::stdin().lock().read_line(&mut input)?;
+  let answer = Question::ask("    Type \"yes, reset progress\" to confirm.")
+    .exact_yes("yes, reset progress")
+    .prompt()?;
 
-  if input.trim() != "yes" {
+  if !answer {
     println!("Cancelled.");
     return Ok(());
   }
@@ -176,7 +176,7 @@ fn verify_repo(repo_path: &std::path::Path) -> (Vec<exercise::Exercise>, Vec<(Pa
 /// Handle the `verify` subcommand: report whether every exercise in the repo
 /// parses correctly. Exits with a non-zero status if any exercise failed.
 fn handle_verify(repo: Option<PathBuf>) -> Result<()> {
-  let repo_path = config::resolve_repo_path(repo.as_deref());
+  let repo_path = config::resolve_repo_path(repo.as_deref())?;
   let (_all_exercises, errors) = verify_repo(&repo_path);
 
   if !errors.is_empty() {
@@ -190,7 +190,12 @@ fn handle_verify(repo: Option<PathBuf>) -> Result<()> {
 /// Handle the `init` subcommand: verify the repo's exercise structure and
 /// scaffold a fresh `lq.toml` from it. Does not overwrite an existing lq.toml.
 fn handle_init(repo: Option<PathBuf>) -> Result<()> {
-  let repo_path = config::resolve_repo_path(repo.as_deref());
+  let repo_path = match repo {
+    Some(p) => config::resolve_repo_path(Some(&p))?,
+    // If there's no valid repo yet, we can't pass it into resolve_repo_path as that tries to find
+    // an existing repo
+    None => std::env::current_dir()?,
+  };
   let cfg_path = config::config_path(&repo_path);
   if cfg_path.exists() {
     anyhow::bail!("{} already exists", cfg_path.display());
@@ -231,7 +236,7 @@ fn handle_status(repo: Option<PathBuf>) -> Result<()> {
 /// Handle the `stats` subcommand / `-s` flag: print the complete status report
 /// and write the machine-readable `results.toml`.
 fn handle_stats(repo: Option<PathBuf>) -> Result<()> {
-  let repo_path = config::resolve_repo_path(repo.as_deref());
+  let repo_path = config::resolve_repo_path(repo.as_deref())?;
   stats::run(&repo_path)
 }
 
@@ -257,7 +262,7 @@ fn toolchain_report_lines(repo_path: &std::path::Path) -> Vec<String> {
 /// Handle `-t` / `--toolchain`: print the toolchain report to stdout and exit,
 /// without launching the TUI.
 fn handle_toolchain(repo: Option<PathBuf>) -> Result<()> {
-  let repo_path = config::resolve_repo_path(repo.as_deref());
+  let repo_path = config::resolve_repo_path(repo.as_deref())?;
   for line in toolchain_report_lines(&repo_path) {
     println!("{line}");
   }
@@ -268,7 +273,7 @@ fn handle_toolchain(repo: Option<PathBuf>) -> Result<()> {
 ///
 /// In grade mode the TUI runs normally, but the progress file is ro
 fn handle_default(repo: Option<PathBuf>, grade_mode: bool) -> Result<()> {
-  let repo_path = config::resolve_repo_path(repo.as_deref());
+  let repo_path = config::resolve_repo_path(repo.as_deref())?;
   eprintln!("   Repository: {}", repo_path.display());
   if grade_mode {
     eprintln!("   Grade mode: progress is read-only.");
