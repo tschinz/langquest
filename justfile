@@ -10,7 +10,7 @@ crate_name := "lq"
 args := ""
 project_directory := justfile_directory()
 release := `git describe --tags --always`
-version := "0.2.3"
+version := "0.2.5"
 url := "https://github.com/tschinz/langquest"
 test_repo := justfile_directory() / "tests" / "sample-repo"
 sealed_test_repo := justfile_directory() / "tests" / "sample-repo-sealed"
@@ -645,7 +645,7 @@ sbom:
     cargo sbom --output-format cyclone_dx_json_1_6 >> target/sbom-cyclone_dx_1_6.json
 
 # Upload SBOM to Dependency Track (requires DT_API_KEY, DT_PROJECT_UUID, DT_BASE_URL env vars)
-sbom-upload:
+sbom-upload : sbom
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Uploading SBOM to Dependency Track..."

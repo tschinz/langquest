@@ -2,6 +2,43 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.5] - 2026-10-16
+
+### 🚀 Features
+
+- *(exercise-options)* Add config option for threshold ([b914991](https://github.com/tschinz/lq/commit/b914991cc8e6672260e551acb4c2114300c977ff) - mel-64)
+- *(init)* Add init subcommand for scaffolding lq.toml ([ed90dc6](https://github.com/tschinz/lq/commit/ed90dc60e5238910412f8939f82745b338244312) - mel-64)
+- *(build)* Add windows arm64 build ([67a8d75](https://github.com/tschinz/lq/commit/67a8d75d19fb34a5cced954779a4af3e020d14d2) - zas)
+- *(config)* Discover lq.toml repos in nearby subdirectories ([0eaeb3b](https://github.com/tschinz/lq/commit/0eaeb3b05da54208a118f225add28f7598ddad00) - mel-64)
+- *(utils)* Bound prompt retries and clarify messages ([0239b38](https://github.com/tschinz/lq/commit/0239b38f12a9a5f9ebb342e2149ea335cd2c1cb8) - zas)
+- *(config)* Confirm lq.toml found outside current folder ([69903f0](https://github.com/tschinz/lq/commit/69903f083260630f16acfa91a0f15c38e500ec5d) - zas)
+
+### 🐛 Bug Fixes
+
+- *(tests)* Use valid md syntax in test exercise ([eb58b89](https://github.com/tschinz/lq/commit/eb58b892472f5b9c33288f5d1bc3fef03c0aa682) - mel-64)
+- Recurse up the directory tree to find lq.toml ([f08180c](https://github.com/tschinz/lq/commit/f08180c340fa9769df61309fe2354471ef739606) - mel-64)
+
+### 💼 Other
+
+- Revert "ci: only prepend CHANGELOG.md"
+
+This reverts commit d099aeb04c58dfa252f18331401f47b02d0820a4. ([b83f2de](https://github.com/tschinz/lq/commit/b83f2de327602ee1fe665464001385ba07ad97c4) - mel-64)
+- Merge branch 'fix/recursive' ([69e40e7](https://github.com/tschinz/lq/commit/69e40e71caf9829bed2baad72cacaf2817744d4f) - zas)
+
+### 🚜 Refactoring
+
+- Add utils with question abstraction ([cf40404](https://github.com/tschinz/lq/commit/cf4040420de4b077967697effc1c9198b0316dc4) - mel-64)
+
+### ⚙️ Miscellaneous Tasks
+
+- *(Cargo.lock)* Dump version ([6287962](https://github.com/tschinz/lq/commit/6287962db4380297e42a10202e337a3a6e27ae13) - mel-64)
+- *(tests)* Add tests for quizes based on text exercise type ([7f685c7](https://github.com/tschinz/lq/commit/7f685c725dca5499a1474bdb2b1d014ac72c792a) - mel-64)
+- *(tests)* Add more tests to runner.rs ([2b66852](https://github.com/tschinz/lq/commit/2b66852656b0caa17954633f979aa82b49b6371e) - mel-64)
+- *(fmt)* Format src/config.rs ([1db4c02](https://github.com/tschinz/lq/commit/1db4c023a74343387941d1b35edf13f34c60a771) - mel-64)
+
+
+**Full Changelog**: [v0.2.4...0.2.5](https://github.com/tschinz/lq/compare/v0.2.4...0.2.5)
+
 ## [0.2.3] - 2026-09-25
 
 ### 💼 Other
