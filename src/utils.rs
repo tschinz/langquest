@@ -2,6 +2,17 @@
 
 use std::io::{self, Write};
 
+/// Maximum number of times a prompt re-asks before giving up.
+const MAX_ATTEMPTS: usize = 3;
+
+/// Error returned when the user gives no valid answer within `MAX_ATTEMPTS`.
+fn aborted(expected: impl std::fmt::Display) -> io::Error {
+  io::Error::new(
+    io::ErrorKind::InvalidInput,
+    format!("no valid answer after {MAX_ATTEMPTS} attempts; expected {expected}"),
+  )
+}
+
 /// Builder for yes/no questions.
 ///
 /// ```no_run
@@ -66,16 +77,21 @@ impl Question {
     };
 
     let prompt = hint.map_or(self.msg.clone(), |h| format!("{} [{}]", self.msg, h));
+    let options = if exact_yes.is_empty() {
+      "yes (y) or no (n)".to_string()
+    } else {
+      format!("\"{exact_yes}\" or no (n)")
+    };
 
-    loop {
-      print!("{prompt}: ");
-      io::stdout().flush()?;
+    for attempt in 1..=MAX_ATTEMPTS {
+      eprint!("{prompt}: ");
+      io::stderr().flush()?;
 
       let mut input = String::new();
       io::stdin().read_line(&mut input)?;
-      let input = input.trim().to_ascii_lowercase();
+      let raw = input.trim();
 
-      match input.as_str() {
+      match raw.to_ascii_lowercase().as_str() {
         "" => {
           if let Some(default) = self.default {
             return Ok(default);
@@ -85,8 +101,11 @@ impl Question {
         "n" | "no" => return Ok(false),
         _ => {}
       }
-      println!("Invalid answer. Try again..");
+      if attempt < MAX_ATTEMPTS {
+        eprintln!("Invalid input \"{raw}\". Please answer {options}.");
+      }
     }
+    Err(aborted(options))
   }
 }
 
@@ -127,14 +146,15 @@ impl<'a> Select<'a> {
   /// Print the numbered options and read a choice from stdin.
   /// Returns the index of the chosen option. Enter selects the default of set.
   pub fn prompt(self) -> io::Result<usize> {
-    loop {
-      println!("{}", self.msg);
+    let range = format!("a number between 0 and {}", self.options.len() - 1);
+    for attempt in 1..=MAX_ATTEMPTS {
+      eprintln!("{}", self.msg);
       for (i, option) in self.options.iter().enumerate() {
         let marker = if self.default == Some(i) { ">" } else { " " };
-        println!("  {marker} {i}. {option}");
+        eprintln!("  {marker} {i}. {option}");
       }
-      print!("Enter a number: ");
-      io::stdout().flush()?;
+      eprint!("Enter a number: ");
+      io::stderr().flush()?;
 
       let mut input = String::new();
       io::stdin().read_line(&mut input)?;
@@ -149,7 +169,10 @@ impl<'a> Select<'a> {
       {
         return Ok(n);
       }
-      println!("Invalid answer. Try again..");
+      if attempt < MAX_ATTEMPTS {
+        eprintln!("Invalid input \"{input}\". Please enter {range}.");
+      }
     }
+    Err(aborted(range))
   }
 }
