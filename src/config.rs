@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::ConfigError;
 use crate::identity::GithubIdentity;
-use crate::utils::Select;
+use crate::utils::{Question, Select};
 
 /// Embedded key used to seal the on-disk progress file.
 const PROGRESS_STR: &str = env!("PROGRESS_KEY");
@@ -598,31 +598,65 @@ pub fn resolve_repo_path(cli_repo: Option<&Path>) -> anyhow::Result<PathBuf> {
 /// If a `lq.toml` is found in a subdirectory, directories above aren't
 /// searched.
 pub fn find_repo_root(start: &Path) -> Result<Option<PathBuf>, Error> {
-  let res = std::fs::canonicalize(start)?
-    .ancestors()
-    .take(MAX_WALK_HEIGHT)
-    .find(|dir| dir.join("lq.toml").exists())
-    .map(Path::to_path_buf);
-
-  if res.is_none() {
-    let mut files: Vec<PathBuf> = vec![];
-    find_file_recursively(start, &mut files, 0)?;
-    return match files.len() {
-      0 => Ok(None),
-      1 => Ok(files.pop()),
-      2.. => {
-        println!("No repos were found in the current directory but multiple ones were found close to this one.");
-        let mut options: Vec<&str> = files.iter().map(|f| f.to_str().unwrap()).collect();
-        options.push("None");
-        let selection = Select::of("Choose a directory to open it in langquest.", &options).default(0).prompt()?;
-        if selection == options.len() - 1 {
-          return Ok(None);
-        }
-        Ok(Some(files[selection].clone()))
+  match locate_repo_root(start)? {
+    RepoRoot::Current(dir) => Ok(Some(dir)),
+    RepoRoot::Outside(dir) => confirm_repo(&dir),
+    RepoRoot::None => Ok(None),
+    RepoRoot::Choose(files) => {
+      eprintln!("No lq.toml in the current directory, but several were found nearby.");
+      let mut options: Vec<&str> = files.iter().map(|f| f.to_str().unwrap()).collect();
+      options.push("None of these");
+      let selection = Select::of("Choose a project to open:", &options).default(0).prompt()?;
+      if selection == options.len() - 1 {
+        return Ok(None);
       }
-    };
-  };
-  Ok(res)
+      Ok(Some(files[selection].clone()))
+    }
+  }
+}
+
+/// A located `lq.toml`, before any user interaction.
+enum RepoRoot {
+  /// Found in the current folder; open without asking.
+  Current(PathBuf),
+  /// Found by walking up or in a single subdirectory; confirm first.
+  Outside(PathBuf),
+  /// Several found nearby; let the user pick.
+  Choose(Vec<PathBuf>),
+  /// None found.
+  None,
+}
+
+/// Locate candidate repo roots near `start` without any user interaction.
+fn locate_repo_root(start: &Path) -> Result<RepoRoot, Error> {
+  let cwd = std::fs::canonicalize(start)?;
+  if let Some(dir) = cwd.ancestors().take(MAX_WALK_HEIGHT).find(|dir| dir.join("lq.toml").exists()) {
+    return Ok(if dir == cwd {
+      RepoRoot::Current(dir.to_path_buf())
+    } else {
+      RepoRoot::Outside(dir.to_path_buf())
+    });
+  }
+
+  let mut files: Vec<PathBuf> = vec![];
+  find_file_recursively(start, &mut files, 0)?;
+  Ok(match files.as_slice() {
+    [] => RepoRoot::None,
+    [one] => RepoRoot::Outside(one.clone()),
+    _ => RepoRoot::Choose(files),
+  })
+}
+
+/// Ask the user to confirm opening an `lq.toml` found outside the current
+/// folder. Returns the path on yes, `None` on no.
+fn confirm_repo(dir: &Path) -> Result<Option<PathBuf>, Error> {
+  let ok = Question::ask(format!(
+    "Found an lq.toml outside the current directory, at {}. Open this project?",
+    dir.display()
+  ))
+  .default(true)
+  .prompt()?;
+  Ok(ok.then(|| dir.to_path_buf()))
 }
 
 fn find_file_recursively(dir: &Path, files: &mut Vec<PathBuf>, depth: usize) -> Result<(), Error> {
@@ -931,8 +965,12 @@ mod tests {
     fs::create_dir_all(&nested).expect("create dirs");
     fs::File::create(root.join("lq.toml")).expect("create lq.toml");
 
-    let found = find_repo_root(&nested).expect("root found").unwrap();
-    assert_eq!(found, fs::canonicalize(&root).unwrap());
+    // Use the non-interactive locator: find_repo_root would prompt here, since
+    // the root is outside the current folder.
+    match locate_repo_root(&nested).expect("root located") {
+      RepoRoot::Outside(dir) => assert_eq!(dir, fs::canonicalize(&root).unwrap()),
+      _ => panic!("expected an lq.toml outside the current folder"),
+    }
 
     let _ = fs::remove_dir_all(&root);
   }
