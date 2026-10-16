@@ -4,14 +4,20 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use anyhow::Error;
 use serde::{Deserialize, Serialize};
 
 use crate::error::ConfigError;
 use crate::identity::GithubIdentity;
+use crate::utils::{Question, Select};
 
 /// Embedded key used to seal the on-disk progress file.
 const PROGRESS_STR: &str = env!("PROGRESS_KEY");
 const PROGRESS_KEY: [u8; 32] = unsafe { *PROGRESS_STR.as_ptr().cast::<[u8; 32]>() }; // ok due to build.rs checking key size | safe "tryinto" error as not yet stable on const traits
+
+/// Max depth and height for repository discovery.
+const MAX_RECURSE_DEPTH: usize = 2;
+const MAX_WALK_HEIGHT: usize = 3;
 
 /// Filename of the encrypted progress file, stored alongside `lq.toml`.
 pub const PROGRESS_FILE: &str = ".lq.progress";
@@ -575,12 +581,99 @@ impl ProjectConfig {
 /// Resolve the repository root path.
 ///
 /// If `cli_repo` is `Some`, the provided path is canonicalized and returned.
-/// Otherwise the current working directory is returned.
-pub fn resolve_repo_path(cli_repo: Option<&Path>) -> PathBuf {
+/// Otherwise the current working directory is used. If it doesn't contain
+/// `lq.toml`, parent directories are walked up until one is found.
+/// Returns an error if none is found.
+pub fn resolve_repo_path(cli_repo: Option<&Path>) -> anyhow::Result<PathBuf> {
   match cli_repo {
-    Some(p) => p.canonicalize().unwrap_or_else(|_| p.to_path_buf()),
-    None => std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+    Some(p) => Ok(p.canonicalize().unwrap_or_else(|_| p.to_path_buf())),
+    None => {
+      let cwd = std::env::current_dir()?;
+      find_repo_root(&cwd)?.ok_or_else(|| anyhow::anyhow!("repository root not found: no lq.toml found."))
+    }
   }
+}
+
+/// Search `start` and search a maximum of MAX_RECURSE_DEPTH & MAX_WALK_HEIGHT
+/// If a `lq.toml` is found in a subdirectory, directories above aren't
+/// searched.
+pub fn find_repo_root(start: &Path) -> Result<Option<PathBuf>, Error> {
+  match locate_repo_root(start)? {
+    RepoRoot::Current(dir) => Ok(Some(dir)),
+    RepoRoot::Outside(dir) => confirm_repo(&dir),
+    RepoRoot::None => Ok(None),
+    RepoRoot::Choose(files) => {
+      eprintln!("No lq.toml in the current directory, but several were found nearby.");
+      let mut options: Vec<&str> = files.iter().map(|f| f.to_str().unwrap()).collect();
+      options.push("None of these");
+      let selection = Select::of("Choose a project to open:", &options).default(0).prompt()?;
+      if selection == options.len() - 1 {
+        return Ok(None);
+      }
+      Ok(Some(files[selection].clone()))
+    }
+  }
+}
+
+/// A located `lq.toml`, before any user interaction.
+enum RepoRoot {
+  /// Found in the current folder; open without asking.
+  Current(PathBuf),
+  /// Found by walking up or in a single subdirectory; confirm first.
+  Outside(PathBuf),
+  /// Several found nearby; let the user pick.
+  Choose(Vec<PathBuf>),
+  /// None found.
+  None,
+}
+
+/// Locate candidate repo roots near `start` without any user interaction.
+fn locate_repo_root(start: &Path) -> Result<RepoRoot, Error> {
+  let cwd = std::fs::canonicalize(start)?;
+  if let Some(dir) = cwd.ancestors().take(MAX_WALK_HEIGHT).find(|dir| dir.join("lq.toml").exists()) {
+    return Ok(if dir == cwd {
+      RepoRoot::Current(dir.to_path_buf())
+    } else {
+      RepoRoot::Outside(dir.to_path_buf())
+    });
+  }
+
+  let mut files: Vec<PathBuf> = vec![];
+  find_file_recursively(start, &mut files, 0)?;
+  Ok(match files.as_slice() {
+    [] => RepoRoot::None,
+    [one] => RepoRoot::Outside(one.clone()),
+    _ => RepoRoot::Choose(files),
+  })
+}
+
+/// Ask the user to confirm opening an `lq.toml` found outside the current
+/// folder. Returns the path on yes, `None` on no.
+fn confirm_repo(dir: &Path) -> Result<Option<PathBuf>, Error> {
+  let ok = Question::ask(format!(
+    "Found an lq.toml outside the current directory, at {}. Open this project?",
+    dir.display()
+  ))
+  .default(true)
+  .prompt()?;
+  Ok(ok.then(|| dir.to_path_buf()))
+}
+
+fn find_file_recursively(dir: &Path, files: &mut Vec<PathBuf>, depth: usize) -> Result<(), Error> {
+  if depth > MAX_RECURSE_DEPTH {
+    return Ok(());
+  };
+  for entry in fs::read_dir(dir)? {
+    let path = entry?.path();
+    if path.is_dir() {
+      let candidate = path.join("lq.toml");
+      if candidate.exists() && candidate.is_file() {
+        files.push(path.to_owned());
+      }
+      find_file_recursively(&path, files, depth + 1)?
+    }
+  }
+  Ok(())
 }
 
 /// Return the path to the `lq.toml` config file within the given repo root.
@@ -856,18 +949,39 @@ mod tests {
   }
 
   #[test]
-  fn resolve_repo_path_with_none_returns_cwd() {
-    let result = resolve_repo_path(None);
-    // Should return something (cwd or fallback), not panic
-    assert!(!result.as_os_str().is_empty());
-  }
-
-  #[test]
   fn resolve_repo_path_with_some() {
     let dir = std::env::temp_dir();
     let result = resolve_repo_path(Some(&dir));
     // Canonicalized temp dir should exist
-    assert!(result.exists());
+    assert!(result.expect("repo path").exists());
+  }
+
+  #[test]
+  fn find_repo_root_walks_upwards() {
+    let root = std::env::temp_dir().join("lq_test_find_root");
+    // Clear stale leftovers from a previously failed run.
+    let _ = fs::remove_dir_all(&root);
+    let nested = root.join("a").join("b");
+    fs::create_dir_all(&nested).expect("create dirs");
+    fs::File::create(root.join("lq.toml")).expect("create lq.toml");
+
+    // Use the non-interactive locator: find_repo_root would prompt here, since
+    // the root is outside the current folder.
+    match locate_repo_root(&nested).expect("root located") {
+      RepoRoot::Outside(dir) => assert_eq!(dir, fs::canonicalize(&root).unwrap()),
+      _ => panic!("expected an lq.toml outside the current folder"),
+    }
+
+    let _ = fs::remove_dir_all(&root);
+  }
+
+  #[test]
+  fn find_repo_root_returns_none_without_marker() {
+    let dir = std::env::temp_dir().join("lq_test_find_root_none");
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).expect("create dir");
+    assert!(find_repo_root(&dir).unwrap().is_none());
+    let _ = fs::remove_dir_all(&dir);
   }
 
   #[test]

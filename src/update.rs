@@ -5,6 +5,8 @@
 use anyhow::Context;
 use semver::Version;
 
+use crate::utils::Question;
+
 const RELEASE_API_URL: &str = "https://api.github.com/repos/tschinz/langquest/releases/latest";
 const REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
 
@@ -43,8 +45,6 @@ pub fn check_for_update() -> Option<String> {
 /// Check for an update. If one is available, offer to run the installer.
 /// Returns `true` if an update was made which should result in langquest exiting.
 pub fn check_and_prompt() -> bool {
-  use std::io::Write as _; // For traits
-
   let Some(notice) = check_for_update() else {
     return false;
   };
@@ -52,13 +52,8 @@ pub fn check_and_prompt() -> bool {
 
   if notice.starts_with("Update available") {
     eprintln!("   Install with `{}`", INSTALL_COMMAND);
-    eprint!("   Run it now? [y/N] ");
-    let _ = std::io::stderr().flush();
-
-    let mut input = String::new();
-    let _ = std::io::BufRead::read_line(&mut std::io::stdin().lock(), &mut input);
-
-    if input.trim().eq_ignore_ascii_case("y") {
+    let answer = Question::ask("   Run it now?").default(true).prompt().unwrap_or(false);
+    if answer {
       let _ = run_install();
       return true;
     }
