@@ -7,11 +7,11 @@ $App = if ($env:APP) { $env:APP } else { "lq" }
 $InstallDir = if ($env:INSTALL_DIR) { $env:INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA "Programs\lq\bin" }
 
 $arch = $env:PROCESSOR_ARCHITECTURE
-if ($arch -ne "AMD64") {
-  throw "Unsupported Windows architecture: $arch. Current release assets include x86_64-pc-windows-msvc."
+$target = switch ($arch) {
+  "AMD64" { "x86_64-pc-windows-msvc" }
+  "ARM64" { "aarch64-pc-windows-msvc" }
+  default { throw "Unsupported Windows architecture: $arch. Release assets cover AMD64 and ARM64." }
 }
-
-$target = "x86_64-pc-windows-msvc"
 
 $apiUrl = "https://api.github.com/repos/$Repo/releases/latest"
 $release = Invoke-RestMethod -Uri $apiUrl -Headers @{ "User-Agent" = "lq-installer" } -TimeoutSec 30
