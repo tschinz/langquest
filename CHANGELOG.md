@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.6] - 2026-11-13
+
+### 🚀 Features
+
+- *(tui)* Make esc step back one view and reorder footer hints ([f984369](https://github.com/tschinz/lq/commit/f984369d7fb7fe3c3861655d1829630cb9e81756) - zas)
+
+### ⚙️ Miscellaneous Tasks
+
+- *(ignore)* Add ai files ([515543f](https://github.com/tschinz/lq/commit/515543fd687d71c638868c26a55a678a7ea164f6) - zas)
+
+
+**Full Changelog**: [v0.2.5...v0.2.6](https://github.com/tschinz/lq/compare/v0.2.5...v0.2.6)
+
 ## [0.2.5] - 2026-10-16
 
 ### 🚀 Features
