@@ -936,12 +936,11 @@ impl App {
       .solution_data
       .as_ref()
       .map(|sd| {
-        let mut t = 0;
-        for i in 0..revealed.min(sd.hints.len()) {
-          t += 1; // header
-          t += Self::hint_content_lines(&sd.hints[i], hint_width);
-        }
-        t
+        sd.hints
+          .iter()
+          .take(revealed)
+          .map(|hint| 1 + Self::hint_content_lines(hint, hint_width)) // 1 header line
+          .sum::<usize>()
       })
       .unwrap_or(0);
 
