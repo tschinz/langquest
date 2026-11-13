@@ -8,6 +8,10 @@ All notable changes to this project will be documented in this file.
 
 - *(tui)* Make esc step back one view and reorder footer hints ([f984369](https://github.com/tschinz/lq/commit/f984369d7fb7fe3c3861655d1829630cb9e81756) - zas)
 
+### 🐛 Bug Fixes
+
+- *(app)* Use iterator for revealed hint line count ([250c06b](https://github.com/tschinz/lq/commit/250c06b2e871b84d8b2a57082ed7475dc3f46f65) - zas)
+
 ### ⚙️ Miscellaneous Tasks
 
 - *(ignore)* Add ai files ([515543f](https://github.com/tschinz/lq/commit/515543fd687d71c638868c26a55a678a7ea164f6) - zas)
