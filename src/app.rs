@@ -44,6 +44,16 @@ pub enum View {
   About,
 }
 
+/// View that `Esc` steps back to, or `None` when `Esc` should quit.
+///
+/// Esc climbs one level: Exercise/About -> Overview -> quit.
+fn view_after_esc(view: View) -> Option<View> {
+  match view {
+    View::Overview => None,
+    View::ExerciseView | View::About => Some(View::Overview),
+  }
+}
+
 /// Pages within the Exercise View.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExercisePage {
@@ -638,7 +648,17 @@ impl App {
     }
 
     match key.code {
-      KeyCode::Char('q') | KeyCode::Esc => true,
+      KeyCode::Char('q') => true,
+
+      KeyCode::Esc => match view_after_esc(self.view) {
+        None => true,
+        Some(view) => {
+          self.view = view;
+          self.scroll_offset = 0;
+          self.needs_redraw = true;
+          false
+        }
+      },
 
       KeyCode::Char('m') => {
         self.show_menu = !self.show_menu;
@@ -1196,5 +1216,21 @@ impl App {
     }
 
     pending
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn esc_in_overview_quits() {
+    assert_eq!(view_after_esc(View::Overview), None);
+  }
+
+  #[test]
+  fn esc_in_exercise_or_about_returns_to_overview() {
+    assert_eq!(view_after_esc(View::ExerciseView), Some(View::Overview));
+    assert_eq!(view_after_esc(View::About), Some(View::Overview));
   }
 }

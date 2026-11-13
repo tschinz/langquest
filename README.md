@@ -246,7 +246,7 @@ lq
 
 | Key         | Action                                 |
 |-------------|----------------------------------------|
-| `a`         | Open about page                        |
+| `a`         | Open about page (`a` / `Esc` back to the Overview) |
 | `m`         | Toggle menubar                         |
 | `q`         | Quit LangQuest                         |
 
@@ -257,6 +257,7 @@ lq
 | `↑` / `↓` | Navigate the exercise list             |
 | `Enter`     | Open the selected exercise             |
 | `z`         | Collapse / expand all exercise folders |
+| `Esc`       | Quit LangQuest                         |
 
 #### Exercise
 
@@ -268,7 +269,7 @@ lq
 | `e`         | Open the current exercise file in your editor                |
 | `E`         | Open the current exercise directory in your editor           |
 | `h`         | Reveal the next hint                                         |
-| `o`         | Go back to the Overview page                                 |
+| `o` / `Esc` | Go back to the Overview page                                 |
 
 - Arrow keys: scroll up/down, switch tabs
 - `j`/`k`: switch to previous / next exercise

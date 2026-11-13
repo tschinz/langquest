@@ -152,26 +152,24 @@ fn render_hints_row(frame: &mut Frame, area: Rect, view: View) {
   // Build hints dynamically to support cross-platform arrow characters
   let hints: Vec<(&str, &str)> = match view {
     View::ExerciseView => vec![
+      ("m", "menu"),
+      ("Esc / o", "overview"),
+      ("j / k", "exercises"),
       (left_right, "page"),
       (up_down, "scroll"),
-      ("j / k", "exercise"),
-      ("e", "edit file"),
       ("E", "edit dir"),
+      ("e", "edit file"),
       ("h", "hint"),
-      ("o", "overview"),
-      ("a", "about"),
-      ("q", "quit"),
-      ("m", "menu"),
     ],
     View::Overview => vec![
+      ("Esc / q", "quit"),
+      ("m", "menu"),
+      ("a", "about"),
+      ("z", "collapse"),
       (up_down, "navigate"),
       ("Enter", "open"),
-      ("z", "collapse"),
-      ("a", "about"),
-      ("q", "quit"),
-      ("m", "menu"),
     ],
-    View::About => vec![(up_down, "scroll"), ("a", "back"), ("q", "quit"), ("m", "menu")],
+    View::About => vec![("Esc / a", "back"), ("q", "quit"), ("m", "menu"), (up_down, "scroll")],
   };
 
   let mut spans: Vec<Span<'static>> = Vec::new();
